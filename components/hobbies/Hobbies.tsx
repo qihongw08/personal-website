@@ -1,0 +1,104 @@
+import { hobbies } from "@/content/hobbies";
+import { scanMedia } from "@/lib/media";
+import { SectionHeader } from "@/components/shared/SectionHeader";
+import { FadeInWhenVisible } from "@/components/shared/FadeInWhenVisible";
+import { MediaViewer } from "./MediaViewer";
+import { SpotifyEmbed } from "./SpotifyEmbed";
+import { LeagueCard } from "./LeagueCard";
+
+export async function Hobbies() {
+  const cardBase = "glass-card relative overflow-hidden rounded-xl p-6";
+
+  const badmintonMedia = scanMedia(
+    hobbies.badminton.mediaDir,
+    hobbies.badminton.captions,
+  );
+  const hikingMedia = scanMedia(
+    hobbies.hiking.mediaDir,
+    hobbies.hiking.captions,
+  );
+  const edmMedia = scanMedia(hobbies.edm.mediaDir, hobbies.edm.captions);
+
+  return (
+    <section
+      id="hobbies"
+      className="mx-auto max-w-[1100px] px-10 pt-[140px] pb-[100px]"
+    >
+      <FadeInWhenVisible>
+        <SectionHeader title="Hobbies" />
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          {/* League of Legends — 2x2 on md+, live Riot API */}
+          <LeagueCard />
+
+          {/* Badminton — 2x2 on md+ */}
+          <div className={`${cardBase} !p-0 md:col-span-2 md:row-span-2`}>
+            <div className="p-3 pb-0">
+              <MediaViewer media={badmintonMedia} variant="wall" />
+            </div>
+            <div className="px-6 py-4">
+              <h3 className="m-0 font-display text-[22px] font-bold text-[var(--ink)]">
+                {hobbies.badminton.title}
+              </h3>
+            </div>
+          </div>
+
+          {/* Hiking */}
+          <div className={`${cardBase} md:col-span-2`}>
+            <div className="mb-3 flex items-start justify-between">
+              <div>
+                <div className="mb-2 font-mono text-[10px] tracking-[1px] text-[var(--ink-faint)]">
+                  TRAIL_LOG
+                </div>
+                <h3 className="m-0 font-display text-xl font-bold text-[var(--ink)]">
+                  {hobbies.hiking.title}
+                </h3>
+              </div>
+              <div className="flex gap-4">
+                {hobbies.hiking.stats.map((s) => (
+                  <div key={s.label} className="text-right">
+                    <div className="mb-0.5 font-mono text-[9px] tracking-[1.5px] text-[var(--ink-faint)]">
+                      {s.label}
+                    </div>
+                    <div className="text-[13px] font-semibold text-[var(--brand)]">
+                      {s.value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {hikingMedia.length > 0 && (
+              <div className="mt-2">
+                <MediaViewer media={hikingMedia} variant="strip" />
+              </div>
+            )}
+          </div>
+
+          {/* EDM */}
+          <div className={`${cardBase} md:col-span-2`}>
+            <div
+              className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg"
+              style={{
+                background: "rgba(124,58,237,0.08)",
+                border: "1px solid rgba(124,58,237,0.15)",
+              }}
+            >
+              <span className="text-sm">♪</span>
+            </div>
+            <h3 className="m-0 font-display text-base font-bold text-[var(--ink)]">
+              {hobbies.edm.title}
+            </h3>
+            {edmMedia.length > 0 && (
+              <div className="mt-3">
+                <MediaViewer media={edmMedia} variant="strip" />
+              </div>
+            )}
+          </div>
+
+          {/* Spotify embed */}
+          <SpotifyEmbed />
+        </div>
+      </FadeInWhenVisible>
+    </section>
+  );
+}
