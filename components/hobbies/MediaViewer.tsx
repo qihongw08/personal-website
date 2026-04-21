@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import { ChevronLeft, ChevronRight, Play, X } from "lucide-react";
 import type { Media } from "@/lib/media";
 
@@ -55,23 +56,28 @@ function stripSize(i: number): Size {
   return cycle[i % cycle.length];
 }
 
-function Polaroid({
+const Polaroid = memo(function Polaroid({
   item,
+  index,
   width,
   height,
   rotation,
-  onClick,
+  priority,
+  onOpen,
 }: {
   item: Media;
+  index: number;
   width: number;
   height: number;
   rotation: number;
-  onClick: () => void;
+  priority: boolean;
+  onOpen: (index: number) => void;
 }) {
+  const handleClick = useCallback(() => onOpen(index), [onOpen, index]);
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={handleClick}
       aria-label={`Open ${item.caption ?? item.label}`}
       className="group relative flex-shrink-0 outline-none transition-transform duration-500 hover:z-10 focus-visible:z-10"
       style={{
@@ -81,7 +87,7 @@ function Polaroid({
       }}
     >
       <div
-        className="flex flex-col p-2 pb-0 transition-all duration-500 group-hover:-translate-y-1 group-hover:scale-[1.04] group-hover:rotate-0 group-focus-visible:rotate-0"
+        className="flex flex-col p-2 pb-0 transition-transform duration-500 group-hover:-translate-y-1 group-hover:scale-[1.04] group-hover:rotate-0 group-focus-visible:rotate-0"
         style={{
           background: "#faf6ee",
           borderRadius: 3,
@@ -99,15 +105,18 @@ function Polaroid({
               src={item.src}
               muted
               playsInline
-              preload="metadata"
+              preload="none"
               className="pointer-events-none h-full w-full object-cover"
             />
           ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               src={item.src}
               alt={item.label}
-              className="h-full w-full object-cover"
+              fill
+              sizes={`${width}px`}
+              loading={priority ? "eager" : "lazy"}
+              priority={priority}
+              className="object-cover"
             />
           )}
           {item.type === "video" && (
@@ -140,11 +149,12 @@ function Polaroid({
       </div>
     </button>
   );
-}
+});
 
 export function MediaViewer({ media, variant, maxVisible }: Props) {
   const [lightbox, setLightbox] = useState<number | null>(null);
 
+  const openAt = useCallback((i: number) => setLightbox(i), []);
   const close = useCallback(() => setLightbox(null), []);
   const next = useCallback(() => {
     setLightbox((i) => (i === null ? null : (i + 1) % media.length));
@@ -208,10 +218,12 @@ export function MediaViewer({ media, variant, maxVisible }: Props) {
             <Polaroid
               key={m.src}
               item={m}
+              index={i}
               width={w}
               height={h}
               rotation={tiltFor(m.src)}
-              onClick={() => setLightbox(i)}
+              priority={i === 0 && variant === "wall"}
+              onOpen={openAt}
             />
           );
         })}
@@ -290,11 +302,15 @@ function Lightbox({
               className="block max-h-[70vh] max-w-[84vw] object-contain"
             />
           ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               key={item.src}
               src={item.src}
               alt={item.label}
+              width={1600}
+              height={1200}
+              sizes="84vw"
+              priority
+              style={{ width: "auto", height: "auto" }}
               className="block max-h-[70vh] max-w-[84vw] object-contain"
             />
           )}
