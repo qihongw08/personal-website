@@ -1,3 +1,5 @@
+import { asset } from "@/lib/assets";
+
 export const profile = {
   name: {
     en: "Qihong Wu",
@@ -52,5 +54,5 @@ export const profile = {
 
   profilePhoto: null as string | null,
 
-  resumePath: "/resume.pdf",
+  resumePath: asset("resume.pdf"),
 } as const;

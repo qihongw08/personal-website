@@ -3,7 +3,7 @@ import { unstable_cache } from "next/cache";
 import { z } from "zod";
 import type { FriendNode } from "@/components/friend-graph";
 
-const BLOB_PATHNAME = "linkedin-profiles.json";
+const BLOB_PATHNAME = "linkedin-profile/profiles.json";
 
 const PictureAssetSchema = z.object({
   url: z.string().optional(),

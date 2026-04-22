@@ -9,15 +9,11 @@ import { LeagueCard } from "./LeagueCard";
 export async function Hobbies() {
   const cardBase = "glass-card relative overflow-hidden rounded-xl p-6";
 
-  const badmintonMedia = scanMedia(
-    hobbies.badminton.mediaDir,
-    hobbies.badminton.captions,
-  );
-  const hikingMedia = scanMedia(
-    hobbies.hiking.mediaDir,
-    hobbies.hiking.captions,
-  );
-  const edmMedia = scanMedia(hobbies.edm.mediaDir, hobbies.edm.captions);
+  const [badmintonMedia, hikingMedia, edmMedia] = await Promise.all([
+    scanMedia(hobbies.badminton.mediaDir, hobbies.badminton.captions),
+    scanMedia(hobbies.hiking.mediaDir, hobbies.hiking.captions),
+    scanMedia(hobbies.edm.mediaDir, hobbies.edm.captions),
+  ]);
 
   return (
     <section

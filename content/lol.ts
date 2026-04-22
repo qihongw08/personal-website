@@ -31,7 +31,7 @@ export type LolTeam = {
   name: string;
   /** e.g. "2023–24, 2024–25" */
   years: string;
-  /** Optional path under `public/`, e.g. "/logos/northeastern-esports.png" */
+  /** Path under `public/`, e.g. "/logos/northeastern-esports.png". */
   logo?: string;
 };
 
