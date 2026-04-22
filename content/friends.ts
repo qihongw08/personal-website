@@ -1,36 +1,42 @@
-export type Friend = { name: string; tags: string[] };
+import type { TagDefinition } from "@/components/friend-graph";
 
-export const friends: Friend[] = [
-  { name: "Alex", tags: ["College", "Badminton"] },
-  { name: "Jordan", tags: ["College", "Hackathon"] },
-  { name: "Sam", tags: ["High School"] },
-  { name: "Taylor", tags: ["Work", "College"] },
-  { name: "Riley", tags: ["Badminton"] },
-  { name: "Morgan", tags: ["Hackathon", "College"] },
-  { name: "Casey", tags: ["High School", "Hiking"] },
-  { name: "Jamie", tags: ["Work"] },
-  { name: "Drew", tags: ["EDM", "College"] },
-  { name: "Quinn", tags: ["Hiking", "High School"] },
-];
+export const FRIEND_TAGS = [
+  "HIGH SCHOOL BUDDY",
+  "COLLEGE BUDDY",
+  "COLLEGE FRIEND / COWORKER",
+  "GENERATE BUDDY",
+  "HACKMIT 2025",
+] as const;
 
-export const tagColors: Record<string, { bg: string; border: string; text: string }> = {
-  College: { bg: "rgba(8,145,178,0.1)", border: "rgba(8,145,178,0.3)", text: "#0891b2" },
-  "High School": {
-    bg: "rgba(217,119,6,0.1)",
-    border: "rgba(217,119,6,0.3)",
-    text: "#d97706",
+export type FriendTag = (typeof FRIEND_TAGS)[number];
+
+export const tagRegistry: Record<FriendTag, TagDefinition> = {
+  "COLLEGE BUDDY": { label: "College Buddy", color: "#0891b2" },
+  "HIGH SCHOOL BUDDY": { label: "High School Buddy", color: "#d97706" },
+  "GENERATE BUDDY": { label: "Generate Buddy", color: "#16a34a" },
+  "COLLEGE FRIEND / COWORKER": {
+    label: "College Friend / Coworker",
+    color: "#db2777",
   },
-  Work: { bg: "rgba(22,163,74,0.1)", border: "rgba(22,163,74,0.3)", text: "#16a34a" },
-  Badminton: {
-    bg: "rgba(124,58,237,0.1)",
-    border: "rgba(124,58,237,0.3)",
-    text: "#7c3aed",
-  },
-  Hackathon: {
-    bg: "rgba(220,38,38,0.1)",
-    border: "rgba(220,38,38,0.3)",
-    text: "#dc2626",
-  },
-  Hiking: { bg: "rgba(22,163,74,0.1)", border: "rgba(22,163,74,0.3)", text: "#16a34a" },
-  EDM: { bg: "rgba(219,39,119,0.1)", border: "rgba(219,39,119,0.3)", text: "#db2777" },
+  "HACKMIT 2025": { label: "HackMIT '25", color: "#9333ea" },
+};
+
+/**
+ * Friends list — LinkedIn URL → tags. The Apify scraper fetches live
+ * profile data (name, headline, photo) at build/ISR time. URLs without
+ * a successful fetch fall back to a synthesized name from the URL handle.
+ */
+export const friendLinkedins: Record<string, FriendTag[]> = {
+  "https://www.linkedin.com/in/quntao-zheng": ["HIGH SCHOOL BUDDY"],
+  "https://www.linkedin.com/in/jiaxi-pan-553a742bb": ["HIGH SCHOOL BUDDY"],
+  "https://www.linkedin.com/in/yingyi-guan9/": ["HIGH SCHOOL BUDDY"],
+  "https://www.linkedin.com/in/kelly-chen-a54119204/": ["HIGH SCHOOL BUDDY"],
+  "https://www.linkedin.com/in/xiaolesu": ["COLLEGE BUDDY", "HACKMIT 2025"],
+  "https://www.linkedin.com/in/vivianzou1": ["COLLEGE BUDDY"],
+  "https://www.linkedin.com/in/sanjana-singhania": ["COLLEGE BUDDY"],
+  "https://www.linkedin.com/in/austin-hwang18/": ["COLLEGE BUDDY"],
+  "https://www.linkedin.com/in/lok-ye-young-62ba3b25a": [
+    "COLLEGE FRIEND / COWORKER",
+  ],
+  "https://www.linkedin.com/in/dao-ho": ["GENERATE BUDDY"],
 };

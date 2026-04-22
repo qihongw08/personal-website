@@ -259,6 +259,39 @@ Opacity + overlay are tuned so the painting reads as atmosphere, not a photograp
 
 ---
 
+## Friend Graph
+
+Reusable, package-ready component at `components/friend-graph/`. Generic over a string-literal tag union so callers get compile-time tag safety: `<FriendGraph<"college" | "work">>`.
+
+**Layout**
+- Root node centered in a 1600×900 viewBox, auto-connected to every cluster.
+- Friends grouped by their sorted tag signature — friends with identical tag sets form one cluster; multi-tag friends form singleton clusters.
+- Clusters distributed on an ellipse (Rx 360–460, Ry 200–280) around the root.
+
+**Visual**
+- Cluster frame: dashed `6 5` stroke, 16px corner radius, tag-tinted at `55` alpha (fill at `0a`).
+- Cluster label: uppercase tag label(s) joined by ` · ` in Geist Mono, 11px, 1.5px tracking, tag color.
+- Friend tile: 120×140, glass-card surface, rounded 14px, 52px avatar + name (Space Grotesk 12/600) + optional headline (Geist Mono 9/600, uppercase).
+- Root tile: 160×180, 72px avatar, double-layer shadow with brand-cyan glow.
+- Root edges: dashed `5 6` stroke in `--brand` at 45% opacity.
+- Bridge edges (clusters sharing a tag): dashed `3 6` stroke in `--ink-faint` at 35% opacity.
+
+**Motion**
+- Static layout — positions are deterministic (friends sorted by `id` before clustering to keep SSR output stable).
+- Staggered reveal (0.08s per cluster) on scroll via `whileInView` with fade + subtle scale.
+- Hover lifts a tile by 3px with a tag-tinted glow; `useReducedMotion` collapses to instant state.
+
+**Interaction**
+- Scroll-wheel zoom (0.3×–3×) centered on the cursor; cancels page scroll while over the SVG.
+- Click-and-drag anywhere on empty canvas to pan. Pointer capture keeps the gesture alive outside the SVG bounds. Interactive targets (buttons, links) opt out of pan so clicks still work.
+- Cursor toggles between `grab` and `grabbing`; `touch-action: none` enables smooth trackpad pan on touch devices.
+
+**Portability**
+- No imports from `content/*` or `lib/*`. Colors fall back to hex when CSS vars are absent (`var(--brand, #0891b2)`), so the component works outside this site.
+- Images use plain `<img loading="lazy">` inside `<foreignObject>` — no Next.js coupling. When extracting to npm, the only dependency is `motion/react`.
+
+---
+
 ## When to Extend
 
 If the design calls for something not in this document:

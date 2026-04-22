@@ -41,7 +41,8 @@ shadcn's own tokens (`--primary`, `--accent`, `--card`, etc.) are kept intact so
 ## Server vs Client
 
 - **Default to Server Components.** `"use client"` only when a component uses state, effects, refs, canvas, or browser-only APIs.
-- Current client components: `Navigation`, `Hero`, `Terminal`, `Career`, `FriendsGraph`, `MediaViewer`, `RankHistoryTable`, `FadeInWhenVisible`, `UnregisterServiceWorker`.
+- Current client components: `Navigation`, `Hero`, `Terminal`, `Career`, `FriendGraph`, `FriendsClient`, `MediaViewer`, `RankHistoryTable`, `FadeInWhenVisible`, `UnregisterServiceWorker`.
+- `components/friend-graph/` is a standalone, package-ready subfolder — no imports from `content/*` or `lib/*`. It's generic over a string-literal tag union, so callers get compile-time safety on tag keys: `<FriendGraph<"college" | "work">>`. Any domain-specific data stays in `content/friends.ts` and is threaded in via props.
 - `CommitGraph`, `Projects`, `About`, `Hobbies`, `Friends` (the container) are Server Components so GitHub fetches and Spotify markup render without shipping a token or extra JS.
 
 ## GitHub Data
