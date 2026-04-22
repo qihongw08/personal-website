@@ -24,9 +24,9 @@ if (!blobToken) {
   process.exit(1);
 }
 
-const actorId = process.env.APIFY_LINKEDIN_ACTOR_ID ?? "LpVuK3Zozwuipa5bp";
+const actorId = process.env.APIFY_LINKEDIN_ACTOR_ID || "LpVuK3Zozwuipa5bp";
 const scraperMode =
-  process.env.APIFY_SCRAPER_MODE ?? "Profile details no email ($4 per 1k)";
+  process.env.APIFY_SCRAPER_MODE || "Profile details no email ($4 per 1k)";
 const BLOB_PATHNAME = "linkedin-profile/profiles.json";
 
 const urls = Object.keys(friendLinkedins);
