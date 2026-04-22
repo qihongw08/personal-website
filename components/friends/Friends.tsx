@@ -22,7 +22,7 @@ export function Friends() {
           />
         </div>
         <p className="mt-3 text-center text-xs text-[var(--ink-faint)]">
-          Scroll to zoom · Drag to pan · Bridges link clusters that share tags
+          Scroll to zoom · Drag to pan
         </p>
       </FadeInWhenVisible>
     </section>

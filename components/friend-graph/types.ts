@@ -29,45 +29,40 @@ export type FriendGraphProps<T extends string = string> = {
 
 export type Vec = { x: number; y: number };
 
-export type PlacedNode<T extends string = string> = {
-  friend: FriendNode<T>;
+export type RootGraphNode = {
+  id: string;
+  kind: "root";
+  root: RootNode;
   position: Vec;
   width: number;
   height: number;
 };
 
-export type PlacedCluster<T extends string = string> = {
+export type FriendGraphNode<T extends string = string> = {
   id: string;
-  signature: string;
-  tags: T[];
-  label: string;
+  kind: "friend";
+  friend: FriendNode<T>;
+  position: Vec;
+  width: number;
+  height: number;
   color: string;
-  nodes: PlacedNode<T>[];
-  box: { x: number; y: number; width: number; height: number };
-  center: Vec;
 };
 
-export type RootEdge = {
-  kind: "root";
-  clusterId: string;
-  from: Vec;
-  to: Vec;
-};
+export type GraphNode<T extends string = string> =
+  | RootGraphNode
+  | FriendGraphNode<T>;
 
-export type BridgeEdge = {
-  kind: "bridge";
-  fromClusterId: string;
-  toClusterId: string;
+export type GraphEdge = {
+  a: string;
+  b: string;
   sharedTags: string[];
-  from: Vec;
-  to: Vec;
+  /** Stroke color for the edge. Absent for root-fallback edges, which
+      let the renderer choose (typically the brand accent). */
+  color?: string;
 };
 
-export type GraphEdge = RootEdge | BridgeEdge;
-
-export type Layout<T extends string = string> = {
-  viewBox: { width: number; height: number };
-  root: { position: Vec; width: number; height: number };
-  clusters: PlacedCluster<T>[];
+export type GraphLayout<T extends string = string> = {
+  viewBox: { x: number; y: number; width: number; height: number };
+  nodes: GraphNode<T>[];
   edges: GraphEdge[];
 };

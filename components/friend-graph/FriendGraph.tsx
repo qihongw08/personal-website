@@ -2,19 +2,27 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import { computeLayout } from "./layout";
+import {
+  computeGraph,
+  convexHull,
+  nodeCenter,
+  nodeEdgeTowards,
+  splitHeadline,
+} from "./layout";
 import type {
+  FriendGraphNode,
   FriendGraphProps,
   FriendNode,
-  PlacedCluster,
-  PlacedNode,
-  RootNode,
+  GraphNode,
+  RootGraphNode,
+  Vec,
 } from "./types";
 
 const TILE_RADIUS = 14;
 const ROOT_RADIUS = 18;
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 3;
+const DRAG_THRESHOLD = 3; // px of screen movement before a pointerdown becomes a drag
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
@@ -73,11 +81,13 @@ function Avatar({
           src={photo}
           alt=""
           loading="lazy"
+          draggable={false}
           style={{
             width: "100%",
             height: "100%",
             objectFit: "cover",
             display: "block",
+            pointerEvents: "none",
           }}
         />
       ) : (
@@ -89,16 +99,20 @@ function Avatar({
 
 function FriendTile<T extends string>({
   node,
-  accent,
   hovered,
   onHover,
+  onNodePointerDown,
+  onSuppressClick,
 }: {
-  node: PlacedNode<T>;
-  accent: string;
+  node: FriendGraphNode<T>;
   hovered: boolean;
   onHover: (id: string | null) => void;
+  onNodePointerDown: (e: React.PointerEvent<HTMLElement>, id: string) => void;
+  onSuppressClick: (id: string) => boolean;
 }) {
-  const { friend, position, width, height } = node;
+  const { friend, position, width, height, color } = node;
+  const accent = color;
+
   const tileStyle: React.CSSProperties = {
     all: "unset",
     boxSizing: "border-box",
@@ -111,52 +125,16 @@ function FriendTile<T extends string>({
     padding: 12,
     gap: 8,
     borderRadius: TILE_RADIUS,
-    cursor: friend.link ? "pointer" : "default",
+    cursor: "grab",
     transform: hovered ? "translateY(-3px)" : "translateY(0)",
     transition: "transform 0.2s ease, box-shadow 0.2s ease",
+    touchAction: "none",
     ...glassStyle,
     boxShadow: hovered
       ? `0 10px 28px ${accent}33, inset 0 1px 0 rgba(255,255,255,0.55)`
       : glassStyle.boxShadow,
     borderColor: hovered ? `${accent}66` : (glassStyle.border as string),
   };
-
-  const content = (
-    <>
-      <Avatar name={friend.name} photo={friend.photo} size={52} accent={accent} />
-      <div
-        style={{
-          fontFamily: "var(--font-display, var(--font-sans), ui-sans-serif)",
-          fontSize: 12,
-          fontWeight: 600,
-          color: "var(--ink, #1a1a2e)",
-          textAlign: "center",
-          lineHeight: 1.25,
-          width: "100%",
-          wordBreak: "break-word",
-        }}
-      >
-        {friend.name}
-      </div>
-      {friend.headline ? (
-        <div
-          style={{
-            fontFamily: "var(--font-mono, ui-monospace), monospace",
-            fontSize: 9,
-            letterSpacing: "0.8px",
-            color: "var(--ink-faint, rgba(26,26,46,0.52))",
-            textTransform: "uppercase",
-            textAlign: "center",
-            lineHeight: 1.3,
-            width: "100%",
-            wordBreak: "break-word",
-          }}
-        >
-          {friend.headline}
-        </div>
-      ) : null}
-    </>
-  );
 
   const hoverHandlers = {
     onMouseEnter: () => onHover(friend.id),
@@ -167,6 +145,12 @@ function FriendTile<T extends string>({
 
   const ariaLabel = `${friend.name}${friend.headline ? ` — ${friend.headline}` : ""}`;
 
+  const nameText = (
+    <span style={{ color: "inherit", textDecoration: "none" }}>
+      {friend.name}
+    </span>
+  );
+
   return (
     <foreignObject
       x={position.x}
@@ -175,39 +159,91 @@ function FriendTile<T extends string>({
       height={height + 8}
       style={{ overflow: "visible" }}
     >
-      {friend.link ? (
-        <a
-          href={friend.link}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={ariaLabel}
-          style={tileStyle}
-          {...hoverHandlers}
+      <div
+        role="group"
+        data-node-id={friend.id}
+        aria-label={ariaLabel}
+        onPointerDown={(e) => onNodePointerDown(e, friend.id)}
+        style={tileStyle}
+        {...hoverHandlers}
+      >
+        <Avatar
+          name={friend.name}
+          photo={friend.photo}
+          size={52}
+          accent={accent}
+        />
+        <div
+          style={{
+            fontFamily: "var(--font-display, var(--font-sans), ui-sans-serif)",
+            fontSize: 12,
+            fontWeight: 600,
+            color: "var(--ink, #1a1a2e)",
+            textAlign: "center",
+            lineHeight: 1.25,
+            width: "100%",
+            wordBreak: "break-word",
+          }}
         >
-          {content}
-        </a>
-      ) : (
-        <div role="group" aria-label={ariaLabel} style={tileStyle} {...hoverHandlers}>
-          {content}
+          {friend.link ? (
+            <a
+              href={friend.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              draggable={false}
+              onClick={(e) => {
+                if (onSuppressClick(friend.id)) e.preventDefault();
+              }}
+              style={{
+                color: "inherit",
+                textDecoration: "none",
+                cursor: "pointer",
+              }}
+            >
+              {nameText}
+            </a>
+          ) : (
+            nameText
+          )}
         </div>
-      )}
+        {friend.headline
+          ? splitHeadline(friend.headline).map((segment, i) => (
+              <div
+                key={i}
+                style={{
+                  fontFamily: "var(--font-mono, ui-monospace), monospace",
+                  fontSize: 9,
+                  letterSpacing: "0.8px",
+                  color: "var(--ink-faint, rgba(26,26,46,0.52))",
+                  textTransform: "uppercase",
+                  textAlign: "center",
+                  lineHeight: 1.3,
+                  width: "100%",
+                  wordBreak: "break-word",
+                }}
+              >
+                {segment}
+              </div>
+            ))
+          : null}
+      </div>
     </foreignObject>
   );
 }
 
-function RootTile({
-  root,
-  position,
-  width,
-  height,
+function RootTile<T extends string>({
+  node,
   accent,
+  onNodePointerDown,
+  onSuppressClick,
 }: {
-  root: RootNode;
-  position: { x: number; y: number };
-  width: number;
-  height: number;
+  node: RootGraphNode;
   accent: string;
+  onNodePointerDown: (e: React.PointerEvent<HTMLElement>, id: string) => void;
+  onSuppressClick: (id: string) => boolean;
+  _t?: T;
 }) {
+  const { root, position, width, height, id } = node;
   const rootStyle: React.CSSProperties = {
     all: "unset",
     boxSizing: "border-box",
@@ -220,134 +256,98 @@ function RootTile({
     padding: 14,
     gap: 10,
     borderRadius: ROOT_RADIUS,
-    cursor: root.link ? "pointer" : "default",
+    cursor: "grab",
+    touchAction: "none",
     ...glassStyle,
     boxShadow: `0 0 0 2px ${accent}55, 0 10px 32px ${accent}2e, inset 0 1px 0 rgba(255,255,255,0.55)`,
   };
-
-  const content = (
-    <>
-      <Avatar name={root.name} photo={root.photo} size={72} accent={accent} />
-      <div
-        style={{
-          fontFamily: "var(--font-display, var(--font-sans), ui-sans-serif)",
-          fontSize: 13,
-          fontWeight: 700,
-          color: "var(--ink, #1a1a2e)",
-          textAlign: "center",
-          lineHeight: 1.25,
-          wordBreak: "break-word",
-        }}
-      >
-        {root.name}
-      </div>
-      {root.headline ? (
-        <div
-          style={{
-            fontFamily: "var(--font-mono, ui-monospace), monospace",
-            fontSize: 9,
-            letterSpacing: "1.2px",
-            color: accent,
-            textTransform: "uppercase",
-            textAlign: "center",
-            wordBreak: "break-word",
-          }}
-        >
-          {root.headline}
-        </div>
-      ) : null}
-    </>
-  );
 
   return (
     <foreignObject
       x={position.x}
       y={position.y}
       width={width}
-      height={height + 40}
+      height={height + 8}
       style={{ overflow: "visible" }}
     >
-      {root.link ? (
-        <a
-          href={root.link}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={root.name}
-          style={rootStyle}
+      <div
+        data-node-id={id}
+        onPointerDown={(e) => onNodePointerDown(e, id)}
+        style={rootStyle}
+        aria-label={root.name}
+      >
+        <Avatar name={root.name} photo={root.photo} size={72} accent={accent} />
+        <div
+          style={{
+            fontFamily: "var(--font-display, var(--font-sans), ui-sans-serif)",
+            fontSize: 13,
+            fontWeight: 700,
+            color: "var(--ink, #1a1a2e)",
+            textAlign: "center",
+            lineHeight: 1.25,
+            wordBreak: "break-word",
+          }}
         >
-          {content}
-        </a>
-      ) : (
-        <div style={rootStyle}>{content}</div>
-      )}
+          {root.link ? (
+            <a
+              href={root.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              draggable={false}
+              onClick={(e) => {
+                if (onSuppressClick(id)) e.preventDefault();
+              }}
+              style={{
+                color: "inherit",
+                textDecoration: "none",
+                cursor: "pointer",
+              }}
+            >
+              {root.name}
+            </a>
+          ) : (
+            root.name
+          )}
+        </div>
+        {root.headline ? (
+          <div
+            style={{
+              fontFamily: "var(--font-mono, ui-monospace), monospace",
+              fontSize: 9,
+              letterSpacing: "1.2px",
+              color: accent,
+              textTransform: "uppercase",
+              textAlign: "center",
+              wordBreak: "break-word",
+            }}
+          >
+            {root.headline}
+          </div>
+        ) : null}
+      </div>
     </foreignObject>
   );
 }
 
-function ClusterFrame<T extends string>({
-  cluster,
-  hoveredId,
-  onHover,
-  index,
-  reduceMotion,
-}: {
-  cluster: PlacedCluster<T>;
-  hoveredId: string | null;
-  onHover: (id: string | null) => void;
-  index: number;
-  reduceMotion: boolean;
-}) {
-  const { box, label, color, nodes } = cluster;
-  const labelY = box.y + 20;
-
-  return (
-    <motion.g
-      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94 }}
-      whileInView={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
-      viewport={{ once: true, margin: "-10% 0px" }}
-      transition={{
-        duration: reduceMotion ? 0.3 : 0.7,
-        delay: reduceMotion ? 0 : index * 0.08,
-        ease: [0.16, 1, 0.3, 1],
-      }}
-      style={{ transformOrigin: `${cluster.center.x}px ${cluster.center.y}px` }}
-    >
-      <rect
-        x={box.x}
-        y={box.y}
-        width={box.width}
-        height={box.height}
-        rx={16}
-        ry={16}
-        fill={`${color}0a`}
-        stroke={`${color}55`}
-        strokeDasharray="6 5"
-        strokeWidth={1}
-      />
-      <text
-        x={box.x + 14}
-        y={labelY}
-        fontSize={11}
-        fontFamily="var(--font-mono, ui-monospace), monospace"
-        fill={color}
-        style={{ letterSpacing: "1.5px", fontWeight: 600 }}
-      >
-        {label}
-      </text>
-      {nodes.map((n) => (
-        <FriendTile
-          key={n.friend.id}
-          node={n}
-          accent={color}
-          hovered={hoveredId === n.friend.id}
-          onHover={onHover}
-        />
-      ))}
-    </motion.g>
-  );
-}
-
 type ViewState = { tx: number; ty: number; scale: number };
+type DragState =
+  | {
+      kind: "node";
+      id: string;
+      pointerId: number;
+      startClientX: number;
+      startClientY: number;
+      nodeStartX: number;
+      nodeStartY: number;
+      moved: boolean;
+    }
+  | {
+      kind: "pan";
+      pointerId: number;
+      lastClientX: number;
+      lastClientY: number;
+      moved: boolean;
+    };
 
 export function FriendGraph<T extends string = string>({
   root,
@@ -360,16 +360,30 @@ export function FriendGraph<T extends string = string>({
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [view, setView] = useState<ViewState>({ tx: 0, ty: 0, scale: 1 });
   const [panning, setPanning] = useState(false);
+  const [positions, setPositions] = useState<Record<string, Vec>>({});
 
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const dragRef = useRef<{ x: number; y: number; pointerId: number } | null>(
-    null,
+  const dragRef = useRef<DragState | null>(null);
+  const suppressClickRef = useRef<Set<string>>(new Set());
+
+  const baseLayout = useMemo(
+    () => computeGraph<T>(root, friends as FriendNode<T>[], tags),
+    [root, friends, tags],
   );
 
-  const layout = useMemo(
-    () => computeLayout<T>(friends as FriendNode<T>[], tags),
-    [friends, tags],
-  );
+  // Apply user-dragged position overrides.
+  const nodes = useMemo<GraphNode<T>[]>(() => {
+    return baseLayout.nodes.map((n) => {
+      const override = positions[n.id];
+      return override ? { ...n, position: override } : n;
+    });
+  }, [baseLayout.nodes, positions]);
+
+  const nodesById = useMemo(() => {
+    const m = new Map<string, GraphNode<T>>();
+    for (const n of nodes) m.set(n.id, n);
+    return m;
+  }, [nodes]);
 
   const rootAccent = "var(--brand, #0891b2)";
 
@@ -383,38 +397,86 @@ export function FriendGraph<T extends string = string>({
       e.preventDefault();
       const rect = svg.getBoundingClientRect();
       const aspectScale = Math.min(
-        rect.width / layout.viewBox.width,
-        rect.height / layout.viewBox.height,
+        rect.width / baseLayout.viewBox.width,
+        rect.height / baseLayout.viewBox.height,
       );
-      // Cursor in viewBox coordinates (pre-pan/zoom offset accounted).
-      const offsetX = (rect.width - layout.viewBox.width * aspectScale) / 2;
-      const offsetY = (rect.height - layout.viewBox.height * aspectScale) / 2;
-      const cursorX = (e.clientX - rect.left - offsetX) / aspectScale;
-      const cursorY = (e.clientY - rect.top - offsetY) / aspectScale;
+      const offsetX = (rect.width - baseLayout.viewBox.width * aspectScale) / 2;
+      const offsetY =
+        (rect.height - baseLayout.viewBox.height * aspectScale) / 2;
+      const cursorX =
+        (e.clientX - rect.left - offsetX) / aspectScale + baseLayout.viewBox.x;
+      const cursorY =
+        (e.clientY - rect.top - offsetY) / aspectScale + baseLayout.viewBox.y;
 
       setView((v) => {
         const factor = Math.exp(-e.deltaY * 0.0015);
         const newScale = clamp(v.scale * factor, MIN_SCALE, MAX_SCALE);
         const k = newScale / v.scale;
-        // Keep the point under the cursor fixed.
-        const newTx = cursorX - (cursorX - v.tx) * k;
-        const newTy = cursorY - (cursorY - v.ty) * k;
-        return { tx: newTx, ty: newTy, scale: newScale };
+        return {
+          tx: cursorX - (cursorX - v.tx) * k,
+          ty: cursorY - (cursorY - v.ty) * k,
+          scale: newScale,
+        };
       });
     };
 
     svg.addEventListener("wheel", onWheel, { passive: false });
     return () => svg.removeEventListener("wheel", onWheel);
-  }, [layout.viewBox.width, layout.viewBox.height]);
+  }, [
+    baseLayout.viewBox.x,
+    baseLayout.viewBox.y,
+    baseLayout.viewBox.width,
+    baseLayout.viewBox.height,
+  ]);
+
+  const screenDeltaToViewBox = (dxScreen: number, dyScreen: number) => {
+    const svg = svgRef.current;
+    if (!svg) return { x: 0, y: 0 };
+    const rect = svg.getBoundingClientRect();
+    const aspectScale = Math.min(
+      rect.width / baseLayout.viewBox.width,
+      rect.height / baseLayout.viewBox.height,
+    );
+    return {
+      x: dxScreen / aspectScale / view.scale,
+      y: dyScreen / aspectScale / view.scale,
+    };
+  };
+
+  const onNodePointerDown = (
+    e: React.PointerEvent<HTMLElement>,
+    id: string,
+  ) => {
+    const node = nodesById.get(id);
+    if (!node) return;
+    // Stop bubbling so the SVG's pointerdown doesn't start a pan at the
+    // same time the user starts dragging a node.
+    e.stopPropagation();
+    dragRef.current = {
+      kind: "node",
+      id,
+      pointerId: e.pointerId,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      nodeStartX: node.position.x,
+      nodeStartY: node.position.y,
+      moved: false,
+    };
+    // Capture on the SVG so subsequent move/up events land there even if
+    // the pointer leaves the tile.
+    svgRef.current?.setPointerCapture(e.pointerId);
+  };
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     const target = e.target as Element;
-    // Don't start a pan if the user grabbed an interactive element.
-    if (target.closest("button, a, input")) return;
+    if (target.closest("[data-node-id]")) return; // handled by node handler
+    if (target.closest("a, button, input")) return;
     dragRef.current = {
-      x: e.clientX,
-      y: e.clientY,
+      kind: "pan",
       pointerId: e.pointerId,
+      lastClientX: e.clientX,
+      lastClientY: e.clientY,
+      moved: false,
     };
     setPanning(true);
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -423,35 +485,114 @@ export function FriendGraph<T extends string = string>({
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
-    const dx = e.clientX - drag.x;
-    const dy = e.clientY - drag.y;
-    dragRef.current = { ...drag, x: e.clientX, y: e.clientY };
 
-    const svg = svgRef.current;
-    if (!svg) return;
-    const rect = svg.getBoundingClientRect();
-    const aspectScale = Math.min(
-      rect.width / layout.viewBox.width,
-      rect.height / layout.viewBox.height,
-    );
-    // Convert screen-space delta to viewBox-space delta, dividing out both
-    // the rendered aspect scale and the current zoom scale.
-    setView((v) => ({
-      ...v,
-      tx: v.tx + dx / aspectScale,
-      ty: v.ty + dy / aspectScale,
-    }));
-  };
-
-  const endPan = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (dragRef.current?.pointerId === e.pointerId) {
-      dragRef.current = null;
-      setPanning(false);
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-        e.currentTarget.releasePointerCapture(e.pointerId);
+    if (drag.kind === "node") {
+      const dxScreen = e.clientX - drag.startClientX;
+      const dyScreen = e.clientY - drag.startClientY;
+      if (!drag.moved && Math.hypot(dxScreen, dyScreen) > DRAG_THRESHOLD) {
+        drag.moved = true;
       }
+      if (!drag.moved) return;
+      const { x: dx, y: dy } = screenDeltaToViewBox(dxScreen, dyScreen);
+      setPositions((prev) => ({
+        ...prev,
+        [drag.id]: {
+          x: drag.nodeStartX + dx,
+          y: drag.nodeStartY + dy,
+        },
+      }));
+    } else {
+      const dxScreen = e.clientX - drag.lastClientX;
+      const dyScreen = e.clientY - drag.lastClientY;
+      drag.lastClientX = e.clientX;
+      drag.lastClientY = e.clientY;
+      if (
+        !drag.moved &&
+        Math.abs(dxScreen) + Math.abs(dyScreen) > DRAG_THRESHOLD
+      ) {
+        drag.moved = true;
+      }
+      const { x: dx, y: dy } = screenDeltaToViewBox(dxScreen, dyScreen);
+      setView((v) => ({ ...v, tx: v.tx + dx, ty: v.ty + dy }));
     }
   };
+
+  const endDrag = (e: React.PointerEvent<SVGSVGElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    if (drag.kind === "node" && drag.moved) {
+      suppressClickRef.current.add(drag.id);
+    }
+    dragRef.current = null;
+    setPanning(false);
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  };
+
+  const consumeClickSuppression = (id: string): boolean => {
+    if (suppressClickRef.current.has(id)) {
+      suppressClickRef.current.delete(id);
+      return true;
+    }
+    return false;
+  };
+
+  // Tag blobs — for each tag shared by 2+ friends, compute the convex hull
+  // of their live positions and render a soft colored region behind the
+  // graph. Multi-tag friends sit in overlapping blobs by construction.
+  const BLOB_OPACITY = 0.16;
+  const tagBlobs = (() => {
+    // Track both the node centers (for hull shape) and the tile top edges
+    // (for label placement so it never sits on top of a card).
+    const byTag = new Map<
+      string,
+      { centers: { x: number; y: number }[]; tileTopY: number }
+    >();
+    for (const n of nodes) {
+      if (n.kind !== "friend") continue;
+      const c = nodeCenter(n);
+      const top = n.position.y;
+      for (const t of n.friend.tags as string[]) {
+        const bucket = byTag.get(t);
+        if (bucket) {
+          bucket.centers.push(c);
+          bucket.tileTopY = Math.min(bucket.tileTopY, top);
+        } else {
+          byTag.set(t, { centers: [c], tileTopY: top });
+        }
+      }
+    }
+    return [...byTag.entries()]
+      .filter(([, b]) => b.centers.length >= 2)
+      .map(([tag, b]) => {
+        const raw =
+          (tags?.[tag as T]?.color as string | undefined) ?? "#8b94a5";
+        // Strip trailing alpha from 8-digit hex so SVG attrs stay well-formed.
+        const color = /^#[0-9a-f]{8}$/i.test(raw) ? raw.slice(0, 7) : raw;
+        return { tag, color, points: b.centers, tileTopY: b.tileTopY };
+      });
+  })();
+
+  // Compute live edge endpoints from the current node positions.
+  const renderedEdges = baseLayout.edges.map((edge, i) => {
+    const a = nodesById.get(edge.a);
+    const b = nodesById.get(edge.b);
+    if (!a || !b) return null;
+    const aCenter = nodeCenter(a);
+    const bCenter = nodeCenter(b);
+    const from = nodeEdgeTowards(a, bCenter);
+    const to = nodeEdgeTowards(b, aCenter);
+    const involvesRoot = a.kind === "root" || b.kind === "root";
+    return {
+      key: i,
+      from,
+      to,
+      involvesRoot,
+      color: edge.color,
+      sharedTags: edge.sharedTags,
+    };
+  });
 
   return (
     <div
@@ -464,14 +605,14 @@ export function FriendGraph<T extends string = string>({
     >
       <svg
         ref={svgRef}
-        viewBox={`0 0 ${layout.viewBox.width} ${layout.viewBox.height}`}
+        viewBox={`${baseLayout.viewBox.x} ${baseLayout.viewBox.y} ${baseLayout.viewBox.width} ${baseLayout.viewBox.height}`}
         preserveAspectRatio="xMidYMid meet"
         role="img"
-        aria-label={`Network graph showing ${friends.length} connections grouped into ${layout.clusters.length} clusters.`}
+        aria-label={`Friend network graph with ${friends.length} connections.`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={endPan}
-        onPointerCancel={endPan}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
         style={{
           width: "100%",
           height,
@@ -481,68 +622,220 @@ export function FriendGraph<T extends string = string>({
           userSelect: "none",
         }}
       >
-        {/* Transparent background captures pan gestures in empty space. */}
         <rect
-          x={0}
-          y={0}
-          width={layout.viewBox.width}
-          height={layout.viewBox.height}
+          x={baseLayout.viewBox.x}
+          y={baseLayout.viewBox.y}
+          width={baseLayout.viewBox.width}
+          height={baseLayout.viewBox.height}
           fill="transparent"
         />
 
+        <defs>
+          {/* Gaussian blur used for the tag blobs — gives the hull edges
+              a soft watercolor bleed instead of a sharp polygon outline,
+              matching the guóhuà ink-wash aesthetic used site-wide. */}
+          <filter
+            id="ink-wash-blob"
+            x="-20%"
+            y="-20%"
+            width="140%"
+            height="140%"
+          >
+            <feGaussianBlur stdDeviation="14" />
+          </filter>
+        </defs>
+
         <g transform={`translate(${view.tx} ${view.ty}) scale(${view.scale})`}>
-          {/* Bridge edges — drawn behind clusters so they read as background lines */}
-          {layout.edges
-            .filter((e) => e.kind === "bridge")
-            .map((e, i) => (
+          {/* Tag blob shapes — rendered inside a blur filter so the hull
+              edges bleed like ink on rice paper. */}
+          <g filter="url(#ink-wash-blob)">
+            {tagBlobs.map((blob) => {
+              if (blob.points.length === 2) {
+                const [p1, p2] = blob.points;
+                return (
+                  <path
+                    key={`blob-shape-${blob.tag}`}
+                    d={`M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`}
+                    fill="none"
+                    stroke={blob.color}
+                    strokeOpacity={BLOB_OPACITY}
+                    strokeLinecap="round"
+                  />
+                );
+              }
+              const hull = convexHull(blob.points);
+              if (hull.length < 3) return null;
+              const d =
+                hull
+                  .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
+                  .join(" ") + " Z";
+              return (
+                <path
+                  key={`blob-shape-${blob.tag}`}
+                  d={d}
+                  fill={blob.color}
+                  fillOpacity={BLOB_OPACITY}
+                  stroke={blob.color}
+                  strokeOpacity={BLOB_OPACITY}
+                  strokeLinejoin="round"
+                />
+              );
+            })}
+          </g>
+
+          {/* Water ripples pulsing outward from the root — three concentric
+              rings on staggered loops evoke a dropped stone on still water. */}
+          {!reduceMotion &&
+            (() => {
+              const rootN = nodes.find(
+                (n): n is RootGraphNode => n.kind === "root",
+              );
+              if (!rootN) return null;
+              const cx = rootN.position.x + rootN.width / 2;
+              const cy = rootN.position.y + rootN.height / 2;
+              const baseR = Math.max(rootN.width, rootN.height) / 2 + 14;
+              return (
+                <g style={{ pointerEvents: "none" }}>
+                  {[0, 1.3, 2.6].map((delay) => (
+                    <motion.circle
+                      key={`ripple-${delay}`}
+                      cx={cx}
+                      cy={cy}
+                      fill="none"
+                      stroke={rootAccent}
+                      strokeWidth={1.5}
+                      initial={{ r: baseR, opacity: 0 }}
+                      animate={{
+                        r: [baseR, baseR + 140],
+                        opacity: [0, 0.35, 0],
+                      }}
+                      transition={{
+                        duration: 3.9,
+                        delay,
+                        repeat: Infinity,
+                        ease: [0.22, 0.61, 0.36, 1],
+                        times: [0, 0.2, 1],
+                      }}
+                    />
+                  ))}
+                </g>
+              );
+            })()}
+
+          {/* Tag labels — rendered outside the blur filter so they stay
+              crisp against the softened hull. */}
+          {tagBlobs.map((blob) => {
+            const label =
+              (tags?.[blob.tag as T]?.label as string | undefined) ?? blob.tag;
+            const xs = blob.points.map((p) => p.x);
+            const labelX = xs.reduce((s, v) => s + v, 0) / xs.length;
+            const labelY = blob.tileTopY - 12;
+            return (
+              <text
+                key={`blob-label-${blob.tag}`}
+                x={labelX}
+                y={labelY}
+                fontSize={13}
+                fontFamily="var(--font-mono, ui-monospace), monospace"
+                fill={blob.color}
+                fillOpacity={0.9}
+                textAnchor="middle"
+                style={{
+                  letterSpacing: "1.5px",
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  pointerEvents: "none",
+                  userSelect: "none",
+                }}
+              >
+                {label}
+              </text>
+            );
+          })}
+
+          {/* MST edges — drawn first so tiles sit above them. Root edges
+              render as a dotted line whose dots flow toward the root, so
+              the hub connection reads as "active"; friend↔friend edges
+              are solid in their shared-tag color. */}
+          {renderedEdges.map((e) => {
+            if (!e) return null;
+            if (e.involvesRoot) {
+              const pattern = "2 10";
+              const cycle = 12; // sum of dasharray for one loop
+              return (
+                <motion.line
+                  key={`edge-${e.key}`}
+                  x1={e.from.x}
+                  y1={e.from.y}
+                  x2={e.to.x}
+                  y2={e.to.y}
+                  stroke={rootAccent}
+                  strokeOpacity={0.85}
+                  strokeWidth={3}
+                  strokeLinecap="round"
+                  strokeDasharray={pattern}
+                  initial={{ strokeDashoffset: 0 }}
+                  animate={
+                    reduceMotion
+                      ? { strokeDashoffset: 0 }
+                      : { strokeDashoffset: -cycle }
+                  }
+                  transition={
+                    reduceMotion
+                      ? { duration: 0 }
+                      : { duration: 1.2, repeat: Infinity, ease: "linear" }
+                  }
+                />
+              );
+            }
+            return (
               <line
-                key={`bridge-${i}`}
+                key={`edge-${e.key}`}
                 x1={e.from.x}
                 y1={e.from.y}
                 x2={e.to.x}
                 y2={e.to.y}
-                stroke="var(--ink-faint, rgba(26,26,46,0.52))"
-                strokeOpacity={0.35}
-                strokeDasharray="3 6"
-                strokeWidth={1}
+                stroke={e.color ?? rootAccent}
+                strokeOpacity={0.8}
+                strokeWidth={2.5}
+                strokeLinecap="round"
               />
-            ))}
+            );
+          })}
 
-          {/* Root edges — dashed cyan from cluster to root */}
-          {layout.edges
-            .filter((e) => e.kind === "root")
-            .map((e, i) => (
-              <line
-                key={`root-${i}`}
-                x1={e.from.x}
-                y1={e.from.y}
-                x2={e.to.x}
-                y2={e.to.y}
-                stroke={rootAccent}
-                strokeOpacity={0.45}
-                strokeDasharray="5 6"
-                strokeWidth={1.2}
-              />
-            ))}
-
-          {layout.clusters.map((c, i) => (
-            <ClusterFrame
-              key={c.id}
-              cluster={c}
-              hoveredId={hoveredId}
-              onHover={setHoveredId}
-              index={i}
-              reduceMotion={reduceMotion}
-            />
-          ))}
-
-          <RootTile
-            root={root}
-            position={layout.root.position}
-            width={layout.root.width}
-            height={layout.root.height}
-            accent={rootAccent}
-          />
+          {/* Nodes. Reveal animation is one-shot on first mount; it does
+              not replay when the user drags a node afterward. */}
+          <motion.g
+            initial={
+              reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96 }
+            }
+            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
+            transition={{
+              duration: reduceMotion ? 0.3 : 0.6,
+              ease: [0.16, 1, 0.3, 1],
+            }}
+          >
+            {nodes.map((n) =>
+              n.kind === "root" ? (
+                <RootTile
+                  key={n.id}
+                  node={n}
+                  accent={rootAccent}
+                  onNodePointerDown={onNodePointerDown}
+                  onSuppressClick={consumeClickSuppression}
+                />
+              ) : (
+                <FriendTile
+                  key={n.id}
+                  node={n}
+                  hovered={hoveredId === n.friend.id}
+                  onHover={setHoveredId}
+                  onNodePointerDown={onNodePointerDown}
+                  onSuppressClick={consumeClickSuppression}
+                />
+              ),
+            )}
+          </motion.g>
         </g>
       </svg>
     </div>

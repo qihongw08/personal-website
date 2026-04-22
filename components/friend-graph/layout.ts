@@ -1,11 +1,10 @@
 import type {
   FriendNode,
   GraphEdge,
-  Layout,
-  PlacedCluster,
-  PlacedNode,
+  GraphLayout,
+  GraphNode,
+  RootNode,
   TagDefinition,
-  Vec,
 } from "./types";
 
 const DEFAULT_PALETTE = [
@@ -19,39 +18,24 @@ const DEFAULT_PALETTE = [
   "#a855f7",
 ];
 
-const VIEWBOX = { width: 1600, height: 900 };
 const ROOT_SIZE = { width: 160, height: 180 };
 const TILE_SIZE = { width: 120, height: 140 };
-const TILE_GAP = 16;
-const CLUSTER_PADDING = 22;
-const CLUSTER_LABEL_SPACE = 28;
+const VIEWBOX_PADDING = 80;
+const NODE_GAP = 48;
 
-function signatureOf<T extends string>(tags: T[]): string {
-  return [...tags].sort().join("|");
-}
+// Tile text-height estimator — mirrors FriendGraph.tsx tile styling.
+const TILE_PADDING = 12;
+const AVATAR_SIZE = 52;
+const TILE_INNER_GAP = 8;
+const NAME_CHAR_WIDTH = 7.5;
+const HEADLINE_CHAR_WIDTH = 8;
+const NAME_LINE_HEIGHT = 15;
+const HEADLINE_LINE_HEIGHT = 12;
 
-function groupBySignature<T extends string>(
-  friends: FriendNode<T>[],
-): Map<string, FriendNode<T>[]> {
-  const sorted = [...friends].sort((a, b) => a.id.localeCompare(b.id));
-  const map = new Map<string, FriendNode<T>[]>();
-  for (const f of sorted) {
-    const key = signatureOf(f.tags);
-    const bucket = map.get(key);
-    if (bucket) bucket.push(f);
-    else map.set(key, [f]);
-  }
-  return map;
-}
-
-function labelFor<T extends string>(
-  tags: T[],
-  registry: Partial<Record<T, TagDefinition>> | undefined,
-): string {
-  if (tags.length === 0) return "UNTAGGED";
-  return tags
-    .map((t) => (registry?.[t]?.label ?? t).toString().toUpperCase())
-    .join(" · ");
+function normalizeColor(color: string): string {
+  // Strip trailing alpha from #RRGGBBAA so callers can safely append alpha.
+  if (/^#[0-9a-f]{8}$/i.test(color)) return color.slice(0, 7);
+  return color;
 }
 
 function colorFor<T extends string>(
@@ -61,232 +45,447 @@ function colorFor<T extends string>(
 ): string {
   for (const t of tags) {
     const c = registry?.[t]?.color;
-    if (c) return c;
+    if (c) return normalizeColor(c);
   }
   return DEFAULT_PALETTE[fallbackIndex % DEFAULT_PALETTE.length];
 }
 
-// Tile-interior content-width constants used by the text-wrap estimator.
-// Layout numbers here mirror the tile styling in FriendGraph.tsx — bumping
-// padding there needs bumping here.
-const TILE_PADDING = 12;
-const AVATAR_SIZE = 52;
-const TILE_INNER_GAP = 8;
-// Average rendered char widths at the tile's fontSize — slightly generous so
-// edge-case long words over-estimate rather than under-estimate.
-const NAME_CHAR_WIDTH = 7.5; // Space Grotesk 12/600
-const HEADLINE_CHAR_WIDTH = 8; // Geist Mono 9/600 uppercase + tracking
-const NAME_LINE_HEIGHT = 15; // 12 * 1.25
-const HEADLINE_LINE_HEIGHT = 12; // 9 * 1.3
+/**
+ * Split a LinkedIn-style headline on `|` separators so each segment can
+ * render on its own line. Whitespace around the pipes is eaten:
+ *   "Incoming @ Google | CS & Finance @ NEU"
+ *   → ["Incoming @ Google", "CS & Finance @ NEU"]
+ */
+export function splitHeadline(headline: string): string[] {
+  return headline
+    .split(/\s*\|\s*/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
 
-function estimateTileHeight<T extends string>(friend: FriendNode<T>): number {
+function estimateFriendHeight<T extends string>(friend: FriendNode<T>): number {
   const contentWidth = TILE_SIZE.width - TILE_PADDING * 2;
   const nameLines = Math.max(
     1,
     Math.ceil((friend.name.length * NAME_CHAR_WIDTH) / contentWidth),
   );
-  const headlineLines = friend.headline
-    ? Math.max(
-        1,
-        Math.ceil(
-          (friend.headline.length * HEADLINE_CHAR_WIDTH) / contentWidth,
-        ),
-      )
-    : 0;
-
-  const base = TILE_PADDING * 2 + AVATAR_SIZE + TILE_INNER_GAP; // top/bot pad + avatar + gap to name
+  const segments = friend.headline ? splitHeadline(friend.headline) : [];
+  let headlineLines = 0;
+  for (const seg of segments) {
+    headlineLines += Math.max(
+      1,
+      Math.ceil((seg.length * HEADLINE_CHAR_WIDTH) / contentWidth),
+    );
+  }
+  const base = TILE_PADDING * 2 + AVATAR_SIZE + TILE_INNER_GAP;
   const nameBlock = nameLines * NAME_LINE_HEIGHT;
-  const headlineBlock = headlineLines
-    ? TILE_INNER_GAP + headlineLines * HEADLINE_LINE_HEIGHT
-    : 0;
-
-  // Never shrink below the default TILE_SIZE so single-line tiles keep their
-  // familiar shape.
-  return Math.max(TILE_SIZE.height, Math.ceil(base + nameBlock + headlineBlock));
+  const headlineBlock =
+    segments.length > 0
+      ? TILE_INNER_GAP + headlineLines * HEADLINE_LINE_HEIGHT
+      : 0;
+  return Math.max(
+    TILE_SIZE.height,
+    Math.ceil(base + nameBlock + headlineBlock),
+  );
 }
 
-function layoutClusterMembers<T extends string>(
-  members: FriendNode<T>[],
-  center: Vec,
-): PlacedNode<T>[] {
-  const n = members.length;
-  const cols = Math.min(n, n <= 3 ? n : n <= 6 ? 3 : 4);
-  const rows = Math.ceil(n / cols);
+type Candidate = {
+  a: string;
+  b: string;
+  weight: number;
+  sharedTags: string[];
+};
 
-  const tileHeights = members.map(estimateTileHeight);
-  const rowHeights: number[] = [];
-  for (let r = 0; r < rows; r++) {
-    const slice = tileHeights.slice(r * cols, (r + 1) * cols);
-    rowHeights.push(slice.length > 0 ? Math.max(...slice) : TILE_SIZE.height);
+/**
+ * Kruskal's algorithm — returns the minimum spanning tree over the given
+ * node set using the supplied candidate edges. Uses union-find with path
+ * compression.
+ */
+function kruskalMst(nodeIds: string[], candidates: Candidate[]): GraphEdge[] {
+  const parent = new Map<string, string>();
+  for (const id of nodeIds) parent.set(id, id);
+  const find = (x: string): string => {
+    const p = parent.get(x) ?? x;
+    if (p === x) return x;
+    const root = find(p);
+    parent.set(x, root);
+    return root;
+  };
+
+  const sorted = [...candidates].sort((a, b) => a.weight - b.weight);
+  const mst: GraphEdge[] = [];
+  for (const e of sorted) {
+    const ra = find(e.a);
+    const rb = find(e.b);
+    if (ra === rb) continue;
+    parent.set(ra, rb);
+    mst.push({ a: e.a, b: e.b, sharedTags: e.sharedTags });
+    if (mst.length === nodeIds.length - 1) break;
+  }
+  return mst;
+}
+
+type Spring = { a: string; b: string; weight: number };
+
+/**
+ * Fruchterman–Reingold force layout.
+ *
+ *   - Every pair of nodes repels (quadratic).
+ *   - Every spring edge attracts (inverse quadratic), scaled by weight so
+ *     strongly-connected pairs pull closer.
+ *   - Temperature cools linearly so motion settles over time.
+ *   - Root is pinned at the origin (it's the conceptual "me" hub).
+ *
+ * Deterministic: same input → same output, so SSR hydration is safe.
+ */
+function forceLayout(
+  nodeIds: string[],
+  springs: Spring[],
+  seedCenters: Map<string, { x: number; y: number }>,
+  opts: {
+    iterations: number;
+    idealDistance: number;
+    rootId: string;
+    canvasExtent: number;
+    /** Per-iteration pull toward origin, applied to non-root nodes. */
+    gravity: number;
+    /** If provided, gravity is only applied to these node ids (typically
+        the root's direct MST neighbors). Indirectly-connected friends
+        still drift inward via their springs to those neighbors, but
+        hold their relative position to them instead of being pulled
+        uniformly toward the center. */
+    gravityTargets?: Set<string>;
+  },
+): Map<string, { x: number; y: number }> {
+  const {
+    iterations,
+    idealDistance: k,
+    rootId,
+    canvasExtent,
+    gravity,
+    gravityTargets,
+  } = opts;
+  const positions = new Map<string, { x: number; y: number }>();
+  for (const id of nodeIds) {
+    const seed = seedCenters.get(id) ?? { x: 0, y: 0 };
+    positions.set(id, { x: seed.x, y: seed.y });
   }
 
-  const totalWidth = cols * TILE_SIZE.width + (cols - 1) * TILE_GAP;
-  const totalHeight =
-    rowHeights.reduce((sum, h) => sum + h, 0) + (rows - 1) * TILE_GAP;
+  for (let iter = 0; iter < iterations; iter++) {
+    // Linear cooling: early iterations move a lot, later ones micro-adjust.
+    const t = (1 - iter / iterations) * (canvasExtent / 10);
+    const disp = new Map<string, { x: number; y: number }>();
+    for (const id of nodeIds) disp.set(id, { x: 0, y: 0 });
 
-  const originX = center.x - totalWidth / 2;
-  const originY = center.y - totalHeight / 2;
+    // Repulsion (every pair).
+    for (let i = 0; i < nodeIds.length; i++) {
+      for (let j = i + 1; j < nodeIds.length; j++) {
+        const ia = nodeIds[i];
+        const ib = nodeIds[j];
+        const pa = positions.get(ia)!;
+        const pb = positions.get(ib)!;
+        let dx = pa.x - pb.x;
+        let dy = pa.y - pb.y;
+        let d = Math.hypot(dx, dy);
+        if (d < 0.01) {
+          // Deterministic jitter based on id order to break overlaps.
+          dx = i - j + 0.01;
+          dy = j - i + 0.01;
+          d = Math.hypot(dx, dy);
+        }
+        const force = (k * k) / d;
+        const da = disp.get(ia)!;
+        const db = disp.get(ib)!;
+        da.x += (dx / d) * force;
+        da.y += (dy / d) * force;
+        db.x -= (dx / d) * force;
+        db.y -= (dy / d) * force;
+      }
+    }
 
-  return members.map((friend, i) => {
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    const yOffset =
-      rowHeights.slice(0, row).reduce((sum, h) => sum + h, 0) + row * TILE_GAP;
+    // Attraction (springs).
+    for (const s of springs) {
+      const pa = positions.get(s.a)!;
+      const pb = positions.get(s.b)!;
+      const dx = pa.x - pb.x;
+      const dy = pa.y - pb.y;
+      const d = Math.hypot(dx, dy);
+      if (d < 0.01) continue;
+      const force = ((d * d) / k) * s.weight;
+      const da = disp.get(s.a)!;
+      const db = disp.get(s.b)!;
+      da.x -= (dx / d) * force;
+      da.y -= (dy / d) * force;
+      db.x += (dx / d) * force;
+      db.y += (dy / d) * force;
+    }
+
+    // Gravity — gentle pull toward the origin. When `gravityTargets` is
+    // supplied, only those nodes feel the pull (typically the root's
+    // direct MST neighbors); indirectly-connected friends follow them
+    // through the springs and keep their relative positioning.
+    if (gravity > 0) {
+      for (const id of nodeIds) {
+        if (id === rootId) continue;
+        if (gravityTargets && !gravityTargets.has(id)) continue;
+        const p = positions.get(id)!;
+        const d = disp.get(id)!;
+        d.x -= p.x * gravity;
+        d.y -= p.y * gravity;
+      }
+    }
+
+    // Apply displacements, limited by temperature; pin root at origin.
+    for (const id of nodeIds) {
+      if (id === rootId) {
+        positions.set(id, { x: 0, y: 0 });
+        continue;
+      }
+      const d = disp.get(id)!;
+      const mag = Math.hypot(d.x, d.y);
+      if (mag < 1e-6) continue;
+      const limit = Math.min(mag, t);
+      const p = positions.get(id)!;
+      p.x += (d.x / mag) * limit;
+      p.y += (d.y / mag) * limit;
+    }
+  }
+
+  return positions;
+}
+
+/**
+ * Build a flat friend graph:
+ *
+ *   - Nodes: root + one friend each.
+ *   - Topology: every pair of friends sharing a tag contributes a weighted
+ *     spring (stronger springs for more shared tags). Root is tied softly
+ *     to everyone so it never drifts off. Kruskal's MST over the same
+ *     weighted candidates selects which edges to actually render.
+ *   - Positions: a force-directed simulation layered on the springs —
+ *     connected friends cluster, and friends bridging multiple tag groups
+ *     naturally fall between those groups in space.
+ */
+export function computeGraph<T extends string>(
+  root: RootNode,
+  friends: FriendNode<T>[],
+  tags: Partial<Record<T, TagDefinition>> | undefined,
+): GraphLayout<T> {
+  const ROOT_ID = "__root__";
+  const sortedFriends = [...friends].sort((a, b) => a.id.localeCompare(b.id));
+  const N = sortedFriends.length;
+
+  const heights = sortedFriends.map(estimateFriendHeight);
+  const maxNodeExtent = Math.max(TILE_SIZE.width, ...heights);
+  // Ideal spring length scales with tile size so tiles don't overlap when
+  // the sim converges.
+  const idealDistance = maxNodeExtent + NODE_GAP;
+  const canvasExtent = Math.max(1, idealDistance * Math.sqrt(N + 1) * 1.5);
+
+  // --- Candidate edges: shared-tag pairs + root-to-everyone fallback -----
+  const candidates: Candidate[] = [];
+  for (let i = 0; i < sortedFriends.length; i++) {
+    for (let j = i + 1; j < sortedFriends.length; j++) {
+      const a = sortedFriends[i];
+      const b = sortedFriends[j];
+      const shared = (a.tags as string[]).filter((t) =>
+        (b.tags as string[]).includes(t),
+      );
+      if (shared.length === 0) continue;
+      candidates.push({
+        a: a.id,
+        b: b.id,
+        sharedTags: shared,
+        weight: 1 / shared.length,
+      });
+    }
+  }
+  for (const f of sortedFriends) {
+    candidates.push({ a: ROOT_ID, b: f.id, sharedTags: [], weight: 10 });
+  }
+
+  const nodeIds = [ROOT_ID, ...sortedFriends.map((f) => f.id)];
+  // Tint each friend↔friend edge with the color of the first shared tag
+  // so the line encodes WHY the two friends are connected.
+  const edges: GraphEdge[] = kruskalMst(nodeIds, candidates).map((e, i) => {
+    if (e.sharedTags.length === 0) return e;
     return {
-      friend,
-      width: TILE_SIZE.width,
-      height: tileHeights[i],
-      position: {
-        x: originX + col * (TILE_SIZE.width + TILE_GAP),
-        y: originY + yOffset,
-      },
+      ...e,
+      color: colorFor(e.sharedTags as T[], tags, i),
     };
   });
-}
 
-// Label is rendered at 11px Geist Mono with 1.5px letter-spacing. Monospace
-// chars run ~6.6px wide at this size, plus the tracking → ~8.1px per char.
-// Add a small fudge so emoji / punctuation don't clip.
-const LABEL_CHAR_WIDTH = 8.1;
-const LABEL_PADDING_X = 14;
+  // --- Force-directed positioning --------------------------------------
+  // Springs pull tightly-connected friends together. Root is pulled weakly
+  // toward every friend so the whole graph stays centered on it.
+  const springs: Spring[] = [];
+  for (let i = 0; i < sortedFriends.length; i++) {
+    for (let j = i + 1; j < sortedFriends.length; j++) {
+      const a = sortedFriends[i];
+      const b = sortedFriends[j];
+      const shared = (a.tags as string[]).filter((t) =>
+        (b.tags as string[]).includes(t),
+      );
+      if (shared.length === 0) continue;
+      springs.push({ a: a.id, b: b.id, weight: shared.length });
+    }
+  }
+  for (const f of sortedFriends) {
+    springs.push({ a: ROOT_ID, b: f.id, weight: 0.12 });
+  }
 
-function estimateLabelWidth(label: string): number {
-  return label.length * LABEL_CHAR_WIDTH + LABEL_PADDING_X * 2;
-}
+  // Deterministic seed positions: friends on a circle, root at origin.
+  const seedCenters = new Map<string, { x: number; y: number }>();
+  seedCenters.set(ROOT_ID, { x: 0, y: 0 });
+  sortedFriends.forEach((f, i) => {
+    const theta = N === 0 ? 0 : (i / N) * Math.PI * 2 - Math.PI / 2;
+    seedCenters.set(f.id, {
+      x: idealDistance * 1.5 * Math.cos(theta),
+      y: idealDistance * 1.5 * Math.sin(theta),
+    });
+  });
 
-function boxFromNodes<T extends string>(
-  nodes: PlacedNode<T>[],
-  minWidth: number,
-): { x: number; y: number; width: number; height: number } {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const n of nodes) {
+  // Only root-adjacent MST neighbors feel gravity. Everyone else is
+  // carried inward by the springs to their neighbors, preserving the
+  // relative tree structure past the first level.
+  const rootAdjacent = new Set<string>();
+  for (const e of edges) {
+    if (e.a === ROOT_ID) rootAdjacent.add(e.b);
+    else if (e.b === ROOT_ID) rootAdjacent.add(e.a);
+  }
+
+  const centers = forceLayout(nodeIds, springs, seedCenters, {
+    iterations: 320,
+    idealDistance,
+    rootId: ROOT_ID,
+    canvasExtent,
+    gravity: 6.7,
+    gravityTargets: rootAdjacent,
+  });
+
+  // --- Materialize nodes from simulated centers ------------------------
+  const rootCenter = centers.get(ROOT_ID)!;
+  const rootNode: GraphNode<T> = {
+    id: ROOT_ID,
+    kind: "root",
+    root,
+    position: {
+      x: rootCenter.x - ROOT_SIZE.width / 2,
+      y: rootCenter.y - ROOT_SIZE.height / 2,
+    },
+    width: ROOT_SIZE.width,
+    height: ROOT_SIZE.height,
+  };
+
+  const friendNodes: GraphNode<T>[] = sortedFriends.map((friend, i) => {
+    const height = heights[i];
+    const c = centers.get(friend.id)!;
+    return {
+      id: friend.id,
+      kind: "friend",
+      friend,
+      position: {
+        x: c.x - TILE_SIZE.width / 2,
+        y: c.y - height / 2,
+      },
+      width: TILE_SIZE.width,
+      height,
+      color: colorFor(friend.tags, tags, i),
+    };
+  });
+
+  const nodes: GraphNode<T>[] = [rootNode, ...friendNodes];
+
+  // --- ViewBox from the simulated footprint ----------------------------
+  let minX = rootNode.position.x;
+  let minY = rootNode.position.y;
+  let maxX = rootNode.position.x + rootNode.width;
+  let maxY = rootNode.position.y + rootNode.height;
+  for (const n of friendNodes) {
     minX = Math.min(minX, n.position.x);
     minY = Math.min(minY, n.position.y);
     maxX = Math.max(maxX, n.position.x + n.width);
     maxY = Math.max(maxY, n.position.y + n.height);
   }
-  const contentWidth = maxX - minX + CLUSTER_PADDING * 2;
-  const width = Math.max(contentWidth, minWidth);
-  const centerX = (minX + maxX) / 2;
+
+  const viewBox = {
+    x: minX - VIEWBOX_PADDING,
+    y: minY - VIEWBOX_PADDING,
+    width: maxX - minX + VIEWBOX_PADDING * 2,
+    height: maxY - minY + VIEWBOX_PADDING * 2,
+  };
+
+  return { viewBox, nodes, edges };
+}
+
+/**
+ * Andrew's monotone-chain convex hull. Returns the hull in counter-
+ * clockwise order. Caller handles degenerate cases (<3 points).
+ */
+export function convexHull(points: { x: number; y: number }[]): {
+  x: number;
+  y: number;
+}[] {
+  if (points.length < 3) return [...points];
+  const sorted = [...points].sort((a, b) =>
+    a.x === b.x ? a.y - b.y : a.x - b.x,
+  );
+  const cross = (
+    o: { x: number; y: number },
+    a: { x: number; y: number },
+    b: { x: number; y: number },
+  ) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+
+  const lower: { x: number; y: number }[] = [];
+  for (const p of sorted) {
+    while (
+      lower.length >= 2 &&
+      cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0
+    ) {
+      lower.pop();
+    }
+    lower.push(p);
+  }
+  const upper: { x: number; y: number }[] = [];
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const p = sorted[i];
+    while (
+      upper.length >= 2 &&
+      cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0
+    ) {
+      upper.pop();
+    }
+    upper.push(p);
+  }
+  lower.pop();
+  upper.pop();
+  return [...lower, ...upper];
+}
+
+export function nodeCenter<T extends string>(
+  node: GraphNode<T>,
+): { x: number; y: number } {
   return {
-    x: centerX - width / 2,
-    y: minY - CLUSTER_PADDING - CLUSTER_LABEL_SPACE,
-    width,
-    height: maxY - minY + CLUSTER_PADDING * 2 + CLUSTER_LABEL_SPACE,
+    x: node.position.x + node.width / 2,
+    y: node.position.y + node.height / 2,
   };
 }
 
-function clusterCircleCenter(
-  index: number,
-  total: number,
-  rootCenter: Vec,
-  Rx: number,
-  Ry: number,
-): Vec {
-  // Start at π (left of root) and distribute clockwise. For small N, this
-  // spreads clusters around the root horizontally first.
-  const theta = Math.PI + (index / Math.max(total, 1)) * Math.PI * 2;
-  return {
-    x: rootCenter.x + Rx * Math.cos(theta),
-    y: rootCenter.y + Ry * Math.sin(theta),
-  };
-}
-
-function edgePointTowards(
-  box: { x: number; y: number; width: number; height: number },
-  target: Vec,
-): Vec {
-  const cx = box.x + box.width / 2;
-  const cy = box.y + box.height / 2;
+/**
+ * Project a line from a node center toward `target` onto the node's axis-
+ * aligned rect boundary so edges visually tuck under the tile edge.
+ */
+export function nodeEdgeTowards<T extends string>(
+  node: GraphNode<T>,
+  target: { x: number; y: number },
+): { x: number; y: number } {
+  const cx = node.position.x + node.width / 2;
+  const cy = node.position.y + node.height / 2;
   const dx = target.x - cx;
   const dy = target.y - cy;
   if (dx === 0 && dy === 0) return { x: cx, y: cy };
-
-  const hx = box.width / 2;
-  const hy = box.height / 2;
-  // Scale so the vector (dx, dy) lands on the box boundary.
+  const hx = node.width / 2;
+  const hy = node.height / 2;
   const scale = 1 / Math.max(Math.abs(dx) / hx, Math.abs(dy) / hy);
   return { x: cx + dx * scale, y: cy + dy * scale };
-}
-
-export function computeLayout<T extends string>(
-  friends: FriendNode<T>[],
-  tags: Partial<Record<T, TagDefinition>> | undefined,
-): Layout<T> {
-  const rootCenter: Vec = { x: VIEWBOX.width / 2, y: VIEWBOX.height / 2 };
-  const rootBox = {
-    x: rootCenter.x - ROOT_SIZE.width / 2,
-    y: rootCenter.y - ROOT_SIZE.height / 2,
-    width: ROOT_SIZE.width,
-    height: ROOT_SIZE.height,
-  };
-
-  const groups = groupBySignature(friends);
-  const entries = [...groups.entries()];
-
-  // Arrange clusters on an ellipse around root — wider than tall so we use
-  // horizontal real estate.
-  const Rx = entries.length <= 3 ? 360 : 460;
-  const Ry = entries.length <= 3 ? 200 : 280;
-
-  const clusters: PlacedCluster<T>[] = entries.map(
-    ([signature, members], i) => {
-      const center = clusterCircleCenter(i, entries.length, rootCenter, Rx, Ry);
-      const placedNodes = layoutClusterMembers(members, center);
-      const memberTags = members[0]?.tags ?? ([] as T[]);
-      const label = labelFor(memberTags, tags);
-      const box = boxFromNodes(placedNodes, estimateLabelWidth(label));
-      return {
-        id: `cluster-${i}`,
-        signature,
-        tags: memberTags,
-        label,
-        color: colorFor(memberTags, tags, i),
-        nodes: placedNodes,
-        box,
-        center,
-      };
-    },
-  );
-
-  const edges: GraphEdge[] = [];
-
-  // Root edges — cluster box edge → root box edge.
-  for (const c of clusters) {
-    const from = edgePointTowards(c.box, rootCenter);
-    const to = edgePointTowards(rootBox, c.center);
-    edges.push({ kind: "root", clusterId: c.id, from, to });
-  }
-
-  // Bridge edges — for each pair of clusters sharing any tag.
-  for (let i = 0; i < clusters.length; i++) {
-    for (let j = i + 1; j < clusters.length; j++) {
-      const a = clusters[i];
-      const b = clusters[j];
-      const shared = a.tags.filter((t) =>
-        (b.tags as string[]).includes(t as string),
-      );
-      if (shared.length === 0) continue;
-      const from = edgePointTowards(a.box, b.center);
-      const to = edgePointTowards(b.box, a.center);
-      edges.push({
-        kind: "bridge",
-        fromClusterId: a.id,
-        toClusterId: b.id,
-        sharedTags: shared as string[],
-        from,
-        to,
-      });
-    }
-  }
-
-  return {
-    viewBox: VIEWBOX,
-    root: { position: { x: rootBox.x, y: rootBox.y }, ...ROOT_SIZE },
-    clusters,
-    edges,
-  };
 }

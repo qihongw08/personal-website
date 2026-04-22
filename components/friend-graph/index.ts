@@ -1,15 +1,14 @@
 export { FriendGraph } from "./FriendGraph";
-export { computeLayout } from "./layout";
+export { computeGraph } from "./layout";
 export type {
   FriendNode,
   FriendGraphProps,
   RootNode,
   TagDefinition,
-  Layout,
-  PlacedCluster,
-  PlacedNode,
+  GraphLayout,
+  GraphNode,
+  RootGraphNode,
+  FriendGraphNode,
   GraphEdge,
-  RootEdge,
-  BridgeEdge,
   Vec,
 } from "./types";
