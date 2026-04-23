@@ -11,6 +11,8 @@ export type Media = {
   label: string;
   /** Optional caption (from `_captions.json` sidecar). */
   caption: string | null;
+  /** Optional date label, free-form (e.g. "Sept 2025"). */
+  date: string | null;
 };
 
 const IMAGE_EXT = /\.(jpe?g|png|webp|gif|avif)$/i;
@@ -25,15 +27,23 @@ function toMedia(
   filename: string,
   src: string,
   captions: Record<string, string>,
+  dates: Record<string, string>,
 ): Media {
   const type: Media["type"] = VIDEO_EXT.test(filename) ? "video" : "image";
   const label = filename.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
-  return { src, type, label, caption: captions[filename] ?? null };
+  return {
+    src,
+    type,
+    label,
+    caption: captions[filename] ?? null,
+    date: dates[filename] ?? null,
+  };
 }
 
 function scanMediaFromDisk(
   dir: string,
   captions: Record<string, string>,
+  dates: Record<string, string>,
 ): Media[] {
   const full = path.join(process.cwd(), "public", dir.replace(/^\/+/, ""));
   let entries: string[];
@@ -48,13 +58,14 @@ function scanMediaFromDisk(
     .sort()
     .map((name) => {
       const src = `/${dir.replace(/^\/+|\/+$/g, "")}/${name}`;
-      return toMedia(name, src, captions);
+      return toMedia(name, src, captions, dates);
     });
 }
 
 async function scanMediaFromBlob(
   prefix: string,
   captions: Record<string, string>,
+  dates: Record<string, string>,
 ): Promise<Media[]> {
   const cleanPrefix = prefix.replace(/^\/+|\/+$/g, "") + "/";
   const { blobs } = await list({ prefix: cleanPrefix });
@@ -63,18 +74,20 @@ async function scanMediaFromBlob(
     .filter(({ name }) => !name.startsWith("."))
     .filter(({ name }) => IMAGE_EXT.test(name) || VIDEO_EXT.test(name))
     .sort((a, b) => a.name.localeCompare(b.name))
-    .map(({ blob, name }) => toMedia(name, blob.url, captions));
+    .map(({ blob, name }) => toMedia(name, blob.url, captions, dates));
 }
 
 const scanMediaCached = unstable_cache(
   async (
     prefix: string,
     captionsJson: string,
+    datesJson: string,
   ): Promise<Media[]> => {
     const captions = JSON.parse(captionsJson) as Record<string, string>;
-    return scanMediaFromBlob(prefix, captions);
+    const dates = JSON.parse(datesJson) as Record<string, string>;
+    return scanMediaFromBlob(prefix, captions, dates);
   },
-  ["scan-media-v1"],
+  ["scan-media-v2"],
   { revalidate: 3600 },
 );
 
@@ -90,17 +103,22 @@ const scanMediaCached = unstable_cache(
 export async function scanMedia(
   dir: string,
   captions: Record<string, string> = {},
+  dates: Record<string, string> = {},
 ): Promise<Media[]> {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return scanMediaFromDisk(dir, captions);
+    return scanMediaFromDisk(dir, captions, dates);
   }
   try {
-    // unstable_cache needs serializable inputs → stringify the captions map.
-    return await scanMediaCached(dir, JSON.stringify(captions));
+    // unstable_cache needs serializable inputs → stringify the maps.
+    return await scanMediaCached(
+      dir,
+      JSON.stringify(captions),
+      JSON.stringify(dates),
+    );
   } catch (err) {
     if (process.env.NODE_ENV === "development") {
       console.error(`[media] blob list failed for ${dir}:`, err);
     }
-    return scanMediaFromDisk(dir, captions);
+    return scanMediaFromDisk(dir, captions, dates);
   }
 }

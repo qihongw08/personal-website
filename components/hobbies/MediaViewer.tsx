@@ -14,6 +14,34 @@ type Props = {
   maxVisible?: number;
 };
 
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+// Accepts "YYYY-MM" or "YYYY-MM-DD" and renders "Sep 2025" / "Sep 14, 2025".
+// Anything that doesn't match the shape passes through unchanged.
+function formatDate(raw: string): string {
+  const match = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(raw.trim());
+  if (!match) return raw;
+  const [, year, monthStr, dayStr] = match;
+  const monthIndex = parseInt(monthStr, 10) - 1;
+  if (monthIndex < 0 || monthIndex > 11) return raw;
+  const month = MONTH_NAMES[monthIndex];
+  if (dayStr) return `${month} ${parseInt(dayStr, 10)}, ${year}`;
+  return `${month} ${year}`;
+}
+
 // Deterministic pseudo-random drawn from the filename — same media always
 // gets the same tilt, so hydration matches and the look is stable.
 function hash(str: string): number {
@@ -31,30 +59,36 @@ function tiltFor(src: string): number {
 
 type Size = { w: number; h: number };
 
-// Wall layout sizing — featured first tile, varied rest.
-function wallSize(i: number): Size {
-  if (i === 0) return { w: 260, h: 200 };
-  const cycle: Size[] = [
-    { w: 120, h: 150 },
-    { w: 150, h: 120 },
-    { w: 140, h: 140 },
-    { w: 130, h: 160 },
-    { w: 160, h: 130 },
-  ];
-  return cycle[(i - 1) % cycle.length];
+/**
+ * Pick tile dimensions from the actual media aspect ratio.
+ *   - strip: constant height, width follows aspect (nice horizontal row).
+ *   - wall:  landscape / portrait / square presets so the collage still
+ *            varies in shape — featured (first) tile is a beat larger.
+ * Aspect is width / height; a landscape 16:9 photo is ~1.78.
+ */
+function sizeFromAspect(
+  aspect: number,
+  variant: Variant,
+  featured: boolean,
+): Size {
+  if (variant === "strip") {
+    const H = 140;
+    return {
+      w: Math.round(Math.max(110, Math.min(240, H * aspect))),
+      h: H,
+    };
+  }
+  const shortSide = featured ? 200 : 140;
+  const longSide = featured ? 280 : 200;
+  const squareSide = featured ? 240 : 160;
+  if (aspect >= 1.1) return { w: longSide, h: shortSide }; // landscape
+  if (aspect <= 0.9) return { w: shortSide, h: longSide }; // portrait
+  return { w: squareSide, h: squareSide };
 }
 
-// Strip layout sizing — mixed widths for organic row feel.
-function stripSize(i: number): Size {
-  const cycle: Size[] = [
-    { w: 170, h: 130 },
-    { w: 140, h: 130 },
-    { w: 200, h: 130 },
-    { w: 150, h: 130 },
-    { w: 180, h: 130 },
-  ];
-  return cycle[i % cycle.length];
-}
+// Assume landscape until the media reports its real dimensions. Keeps
+// the first-paint layout close to the final one so there's no big jump.
+const DEFAULT_ASPECT = 1.3;
 
 const Polaroid = memo(function Polaroid({
   item,
@@ -64,6 +98,7 @@ const Polaroid = memo(function Polaroid({
   rotation,
   priority,
   onOpen,
+  onAspect,
 }: {
   item: Media;
   index: number;
@@ -72,6 +107,7 @@ const Polaroid = memo(function Polaroid({
   rotation: number;
   priority: boolean;
   onOpen: (index: number) => void;
+  onAspect: (src: string, aspect: number) => void;
 }) {
   const handleClick = useCallback(() => onOpen(index), [onOpen, index]);
   return (
@@ -79,7 +115,7 @@ const Polaroid = memo(function Polaroid({
       type="button"
       onClick={handleClick}
       aria-label={`Open ${item.caption ?? item.label}`}
-      className="group relative flex-shrink-0 outline-none transition-transform duration-500 hover:z-10 focus-visible:z-10"
+      className="group relative flex-shrink-0 outline-none transition-all duration-500 hover:z-10 focus-visible:z-10"
       style={{
         width,
         transform: `rotate(${rotation}deg)`,
@@ -97,15 +133,23 @@ const Polaroid = memo(function Polaroid({
         }}
       >
         <div
-          className="relative overflow-hidden"
+          className="relative overflow-hidden transition-[height] duration-500"
           style={{ height, background: "rgba(0,0,0,0.06)" }}
         >
           {item.type === "video" ? (
+            // `#t=0.1` renders the frame at 0.1s as a poster-like thumbnail,
+            // avoiding the black-frame default that preload="metadata" gives.
             <video
-              src={item.src}
+              src={`${item.src}#t=0.1`}
               muted
               playsInline
-              preload="none"
+              preload="metadata"
+              onLoadedMetadata={(e) => {
+                const v = e.currentTarget;
+                if (v.videoWidth && v.videoHeight) {
+                  onAspect(item.src, v.videoWidth / v.videoHeight);
+                }
+              }}
               className="pointer-events-none h-full w-full object-cover"
             />
           ) : (
@@ -116,6 +160,12 @@ const Polaroid = memo(function Polaroid({
               sizes={`${width}px`}
               loading={priority ? "eager" : "lazy"}
               priority={priority}
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                if (img.naturalWidth && img.naturalHeight) {
+                  onAspect(item.src, img.naturalWidth / img.naturalHeight);
+                }
+              }}
               className="object-cover"
             />
           )}
@@ -153,6 +203,15 @@ const Polaroid = memo(function Polaroid({
 
 export function MediaViewer({ media, variant, maxVisible }: Props) {
   const [lightbox, setLightbox] = useState<number | null>(null);
+  const [aspects, setAspects] = useState<Record<string, number>>({});
+
+  const onAspect = useCallback((src: string, aspect: number) => {
+    setAspects((prev) =>
+      Math.abs((prev[src] ?? 0) - aspect) < 0.001
+        ? prev
+        : { ...prev, [src]: aspect },
+    );
+  }, []);
 
   const openAt = useCallback((i: number) => setLightbox(i), []);
   const close = useCallback(() => setLightbox(null), []);
@@ -200,8 +259,6 @@ export function MediaViewer({ media, variant, maxVisible }: Props) {
   const visible = media.slice(0, cap);
   const overflow = media.length - visible.length;
 
-  const sizeFor = variant === "wall" ? wallSize : stripSize;
-
   return (
     <>
       <div
@@ -213,7 +270,9 @@ export function MediaViewer({ media, variant, maxVisible }: Props) {
         style={{ paddingLeft: 6, paddingRight: 6 }}
       >
         {visible.map((m, i) => {
-          const { w, h } = sizeFor(i);
+          const featured = i === 0 && variant === "wall";
+          const aspect = aspects[m.src] ?? DEFAULT_ASPECT;
+          const { w, h } = sizeFromAspect(aspect, variant, featured);
           return (
             <Polaroid
               key={m.src}
@@ -222,8 +281,9 @@ export function MediaViewer({ media, variant, maxVisible }: Props) {
               width={w}
               height={h}
               rotation={tiltFor(m.src)}
-              priority={i === 0 && variant === "wall"}
+              priority={featured}
               onOpen={openAt}
+              onAspect={onAspect}
             />
           );
         })}
@@ -325,10 +385,19 @@ function Lightbox({
           >
             {item.caption ?? item.label}
           </span>
-          {multiple && (
-            <span className="flex-shrink-0 font-mono text-[11px] text-[var(--ink-faint)]">
-              {index + 1} / {media.length}
-            </span>
+          {(item.date || multiple) && (
+            <div className="flex flex-shrink-0 flex-col items-end gap-0.5 leading-tight">
+              {item.date && (
+                <span className="font-mono text-[11px] text-[var(--ink-muted)]">
+                  {formatDate(item.date)}
+                </span>
+              )}
+              {multiple && (
+                <span className="font-mono text-[11px] text-[var(--ink-faint)]">
+                  {index + 1} / {media.length}
+                </span>
+              )}
+            </div>
           )}
         </div>
       </div>
