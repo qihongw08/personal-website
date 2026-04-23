@@ -1,40 +1,39 @@
 import { head } from "@vercel/blob";
-import { unstable_cache } from "next/cache";
 import { z } from "zod";
 import type { FriendNode } from "@/components/friend-graph";
 
 const BLOB_PATHNAME = "linkedin-profile/profiles.json";
 
 const PictureAssetSchema = z.object({
-  url: z.string().optional(),
+  url: z.string().nullish(),
   sizes: z
     .array(
       z.object({
         url: z.string(),
-        width: z.number().optional(),
-        height: z.number().optional(),
+        width: z.number().nullish(),
+        height: z.number().nullish(),
       }),
     )
-    .optional(),
+    .nullish(),
 });
 
 const ApifyProfileSchema = z
   .object({
-    linkedinUrl: z.string().optional(),
-    url: z.string().optional(),
-    profileUrl: z.string().optional(),
-    publicIdentifier: z.string().optional(),
-    firstName: z.string().optional(),
-    lastName: z.string().optional(),
-    fullName: z.string().optional(),
-    name: z.string().optional(),
-    headline: z.string().optional(),
-    photo: z.string().optional(),
-    photoUrl: z.string().optional(),
-    pictureUrl: z.string().optional(),
-    profilePic: z.string().optional(),
-    profilePicHighQuality: z.string().optional(),
-    profilePicture: z.union([z.string(), PictureAssetSchema]).optional(),
+    linkedinUrl: z.string().nullish(),
+    url: z.string().nullish(),
+    profileUrl: z.string().nullish(),
+    publicIdentifier: z.string().nullish(),
+    firstName: z.string().nullish(),
+    lastName: z.string().nullish(),
+    fullName: z.string().nullish(),
+    name: z.string().nullish(),
+    headline: z.string().nullish(),
+    photo: z.string().nullish(),
+    photoUrl: z.string().nullish(),
+    pictureUrl: z.string().nullish(),
+    profilePic: z.string().nullish(),
+    profilePicHighQuality: z.string().nullish(),
+    profilePicture: z.union([z.string(), PictureAssetSchema]).nullish(),
   })
   .loose();
 
@@ -76,7 +75,7 @@ function fallbackNode<T extends string>(url: string, tags: T[]): FriendNode<T> {
 }
 
 function pickUrl(p: ApifyProfile): string | undefined {
-  return p.linkedinUrl ?? p.url ?? p.profileUrl;
+  return p.linkedinUrl ?? p.url ?? p.profileUrl ?? undefined;
 }
 
 function pickName(p: ApifyProfile, url: string): string {
@@ -105,7 +104,8 @@ function pickPhoto(p: ApifyProfile): string | undefined {
     p.profilePicHighQuality ??
     p.pictureUrl ??
     p.profilePic ??
-    p.photoUrl
+    p.photoUrl ??
+    undefined
   );
 }
 
@@ -113,7 +113,7 @@ async function fetchProfilesFromBlob(): Promise<ApifyProfile[]> {
   if (!process.env.BLOB_READ_WRITE_TOKEN) return [];
   try {
     const blob = await head(BLOB_PATHNAME);
-    const res = await fetch(blob.url, { next: { revalidate: 3600 } });
+    const res = await fetch(blob.url, { cache: "no-store" });
     if (!res.ok) return [];
     const raw: unknown = await res.json();
     if (!Array.isArray(raw)) return [];
@@ -131,15 +131,6 @@ async function fetchProfilesFromBlob(): Promise<ApifyProfile[]> {
   }
 }
 
-// Memoize the blob read at the Next data-cache layer. The blob URL is cheap
-// to resolve (one head() call) and the body fetch is further cached by the
-// `next: { revalidate }` hint inside fetchProfilesFromBlob.
-const getCachedProfiles = unstable_cache(
-  fetchProfilesFromBlob,
-  ["linkedin-profiles-v1"],
-  { revalidate: 3600 },
-);
-
 /**
  * Resolve LinkedIn URLs to FriendNodes using data uploaded to Vercel Blob
  * by the weekly scrape-linkedin GitHub Action. URLs without a matching
@@ -149,9 +140,9 @@ const getCachedProfiles = unstable_cache(
 export async function buildFriendNodesFromLinkedin<T extends string>(
   profiles: Record<string, T[]>,
 ): Promise<FriendNode<T>[]> {
-  const cachedProfiles = await getCachedProfiles();
+  const scraped = await fetchProfilesFromBlob();
   const byUrl = new Map<string, ApifyProfile>();
-  for (const p of cachedProfiles) {
+  for (const p of scraped) {
     const u = pickUrl(p);
     if (u) byUrl.set(normalizeUrl(u), p);
   }
@@ -163,7 +154,7 @@ export async function buildFriendNodesFromLinkedin<T extends string>(
     return {
       id: idFromUrl(url),
       name: pickName(match, url),
-      headline: match.headline,
+      headline: match.headline ?? undefined,
       photo: pickPhoto(match),
       link: url,
       tags,
