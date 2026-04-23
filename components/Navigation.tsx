@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { AnimatePresence, motion } from "motion/react";
 import { Menu, X } from "lucide-react";
-import { profile } from "@/content/profile";
 
 const NAV_SECTIONS = [
   "Home",
@@ -66,7 +66,8 @@ export function Navigation() {
       scrolled || open
         ? "1px solid var(--glass-border)"
         : "1px solid transparent",
-    boxShadow: scrolled || open ? "inset 0 1px 0 var(--glass-highlight)" : "none",
+    boxShadow:
+      scrolled || open ? "inset 0 1px 0 var(--glass-highlight)" : "none",
   } as const;
 
   return (
@@ -76,10 +77,17 @@ export function Navigation() {
     >
       <button
         onClick={() => scrollTo("Home")}
-        className="cursor-pointer font-display text-lg font-bold tracking-[2px] text-[var(--brand)]"
+        aria-label="Scroll to top"
+        className="flex h-10 w-10 cursor-pointer items-center justify-center"
       >
-        {profile.initials}
-        <span className="text-[var(--ink-faint)]">.</span>
+        <Image
+          src="/logos/logo.png"
+          alt=""
+          width={100}
+          height={100}
+          priority
+          className="h-10 w-10 object-contain"
+        />
       </button>
 
       {/* Desktop: inline links. Mobile: hamburger toggle. */}

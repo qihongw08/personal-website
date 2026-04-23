@@ -35,10 +35,16 @@ const caveat = Caveat({
 export const metadata: Metadata = {
   title: `${profile.name.en}`,
   description: profile.tagline,
+  icons: {
+    icon: "/logos/logo.png",
+    shortcut: "/logos/logo.png",
+    apple: "/logos/logo.png",
+  },
   openGraph: {
     title: `${profile.name.en}`,
     description: profile.tagline,
     type: "website",
+    images: [{ url: "/logos/logo.png" }],
   },
 };
 
