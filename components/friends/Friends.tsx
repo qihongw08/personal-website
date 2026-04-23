@@ -7,7 +7,7 @@ export function Friends() {
   return (
     <section
       id="friends"
-      className="mx-auto max-w-[1200px] px-10 pt-[140px] pb-[100px]"
+      className="mx-auto max-w-[1200px] px-5 pt-20 pb-16 sm:px-6 md:px-10 md:pt-[140px] md:pb-[100px]"
     >
       <FadeInWhenVisible>
         <SectionHeader title="Friends" />
@@ -22,7 +22,8 @@ export function Friends() {
           />
         </div>
         <p className="mt-3 text-center text-xs text-[var(--ink-faint)]">
-          Scroll to zoom · Drag to pan
+          <span className="hidden md:inline">Scroll to zoom · Drag to pan</span>
+          <span className="md:hidden">Drag to explore</span>
         </p>
       </FadeInWhenVisible>
     </section>

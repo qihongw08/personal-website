@@ -29,21 +29,23 @@ export function Career() {
   return (
     <section
       id="career"
-      className="relative mx-auto max-w-[1100px] overflow-hidden px-10 pt-[140px] pb-[100px]"
+      className="relative mx-auto max-w-[1100px] overflow-hidden px-5 pt-20 pb-16 sm:px-6 md:px-10 md:pt-[140px] md:pb-[100px]"
     >
       <SectionHeader title="Career" />
 
       <div ref={timelineRef} className="relative" style={{ position: "relative" }}>
-        {/* Faint static track — always fully rendered so the line has a shape before scroll */}
+        {/* Faint static track — always fully rendered so the line has a shape before scroll.
+            On <lg viewports the spine sits 14px from the left so cards stack to its right;
+            at lg+ it returns to the centerline for the alternating layout. */}
         <div
           aria-hidden
-          className="absolute left-1/2 top-0 bottom-0 z-[1] w-px -translate-x-1/2"
+          className="absolute left-[14px] top-0 bottom-0 z-[1] w-px lg:left-1/2 lg:-translate-x-1/2"
           style={{ background: "rgba(26,26,46,0.08)" }}
         />
         {/* Scroll-linked progressed gradient — fills top→down as the user scrolls */}
         <motion.div
           aria-hidden
-          className="absolute left-1/2 top-0 bottom-0 z-[1] w-px -translate-x-1/2 origin-top"
+          className="absolute left-[14px] top-0 bottom-0 z-[1] w-px origin-top lg:left-1/2 lg:-translate-x-1/2"
           style={{
             background:
               "linear-gradient(to bottom, var(--brand), rgba(124,58,237,0.35), transparent)",
@@ -53,23 +55,23 @@ export function Career() {
 
         {experience.map((exp, i) => {
           const isLeft = i % 2 === 0;
+          // On <lg we use flex-col-reverse so the (DOM-order) meta column ends up
+          // visually ABOVE the card — role/period reads as a header on mobile.
+          // At lg+ we restore the alternating row layout.
+          const rowDir = isLeft ? "lg:flex-row" : "lg:flex-row-reverse";
 
           return (
             <div
               key={i}
-              className="relative mb-14 flex"
-              style={{
-                flexDirection: isLeft ? "row" : "row-reverse",
-                perspective: 1200,
-              }}
+              className={`relative mb-10 flex flex-col-reverse pl-10 md:mb-14 lg:pl-0 ${rowDir}`}
+              style={{ perspective: 1200 }}
             >
               <div
-                className="flex flex-1"
-                style={{
-                  justifyContent: isLeft ? "flex-end" : "flex-start",
-                  paddingRight: isLeft ? 36 : 0,
-                  paddingLeft: isLeft ? 0 : 36,
-                }}
+                className={`flex flex-1 justify-start ${
+                  isLeft
+                    ? "lg:justify-end lg:pr-9"
+                    : "lg:justify-start lg:pl-9"
+                }`}
               >
                 <div className="relative max-w-[460px]">
                   {/* Water droplet — impact glow plus concentric ripples on reveal */}
@@ -202,7 +204,7 @@ export function Career() {
 
               <div
                 aria-hidden
-                className="absolute left-1/2 top-5 z-[3] -translate-x-1/2"
+                className="absolute left-[14px] top-5 z-[3] -translate-x-1/2 lg:left-1/2"
               >
                 {/* Pulsing ring — signals Active roles are still in progress */}
                 {exp.status === "Active" && !reduceMotion && (
@@ -246,12 +248,11 @@ export function Career() {
               </div>
 
               <motion.div
-                className="z-[2] flex flex-1 flex-col justify-center"
-                style={{
-                  paddingLeft: isLeft ? 36 : 0,
-                  paddingRight: isLeft ? 0 : 36,
-                  textAlign: isLeft ? "left" : "right",
-                }}
+                className={`z-[2] mb-2 flex flex-1 flex-col justify-center text-left lg:mb-0 ${
+                  isLeft
+                    ? "lg:pl-9 lg:text-left"
+                    : "lg:pr-9 lg:text-right"
+                }`}
                 initial={
                   reduceMotion
                     ? { opacity: 0 }

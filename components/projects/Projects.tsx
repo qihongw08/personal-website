@@ -63,7 +63,7 @@ export async function Projects() {
   return (
     <section
       id="projects"
-      className="mx-auto max-w-[1100px] px-10 pt-[140px] pb-[100px]"
+      className="mx-auto max-w-[1100px] px-5 pt-20 pb-16 sm:px-6 md:px-10 md:pt-[140px] md:pb-[100px]"
     >
       <FadeInWhenVisible>
         <SectionHeader title="Projects" />

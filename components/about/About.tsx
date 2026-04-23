@@ -7,15 +7,15 @@ export function About() {
   return (
     <section
       id="about"
-      className="mx-auto max-w-[1100px] px-10 pt-[140px] pb-[100px]"
+      className="mx-auto max-w-[1100px] px-5 pt-20 pb-16 sm:px-6 md:px-10 md:pt-[140px] md:pb-[100px]"
     >
       <FadeInWhenVisible>
         <SectionHeader title="About Me" />
 
-        <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] items-start gap-[60px]">
-          <div>
+        <div className="grid grid-cols-1 items-start gap-8 md:grid-cols-[220px_1fr] md:gap-[60px]">
+          <div className="flex items-start gap-4 md:block">
             <div
-              className="flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-xl border border-[var(--glass-border)] font-mono text-[11px] text-[var(--ink-faint)]"
+              className="flex aspect-[3/4] w-28 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--glass-border)] font-mono text-[11px] text-[var(--ink-faint)] sm:w-36 md:w-full"
               style={{
                 background:
                   "linear-gradient(160deg, rgba(8,145,178,0.08), rgba(124,58,237,0.06))",
@@ -32,11 +32,11 @@ export function About() {
                 "[ profile photo ]"
               )}
             </div>
-            <div className="mt-4 flex flex-col gap-1.5">
+            <div className="flex min-w-0 flex-col gap-1.5 md:mt-4">
               {[profile.email, profile.location].map((t) => (
                 <span
                   key={t}
-                  className="font-mono text-xs text-[var(--ink-faint)]"
+                  className="truncate font-mono text-xs text-[var(--ink-faint)]"
                 >
                   {t}
                 </span>

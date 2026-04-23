@@ -20,13 +20,10 @@ import type {
 
 const TILE_RADIUS = 14;
 const ROOT_RADIUS = 18;
-const MIN_SCALE = 0.3;
-const MAX_SCALE = 3;
+// Prevent scale from collapsing to 0 / flipping / creating NaN; no practical
+// upper bound — zoom as far in as you want.
+const MIN_SCALE = 0.05;
 const DRAG_THRESHOLD = 3; // px of screen movement before a pointerdown becomes a drag
-
-function clamp(v: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, v));
-}
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -410,7 +407,7 @@ export function FriendGraph<T extends string = string>({
 
       setView((v) => {
         const factor = Math.exp(-e.deltaY * 0.0015);
-        const newScale = clamp(v.scale * factor, MIN_SCALE, MAX_SCALE);
+        const newScale = Math.max(MIN_SCALE, v.scale * factor);
         const k = newScale / v.scale;
         return {
           tx: cursorX - (cursorX - v.tx) * k,

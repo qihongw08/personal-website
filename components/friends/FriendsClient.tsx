@@ -17,6 +17,25 @@ type FetchState =
 
 export function FriendsClient({ root, height = 680 }: Props) {
   const [state, setState] = useState<FetchState>({ status: "loading" });
+  // SSR renders at the desktop default; client adjusts on mount + resize so
+  // the graph fits comfortably within the viewport on phones/tablets.
+  const [renderHeight, setRenderHeight] = useState(height);
+
+  useEffect(() => {
+    const compute = () => {
+      const vh = window.innerHeight;
+      const vw = window.innerWidth;
+      // Phone: cap to ~70% of viewport so users can still scroll past it.
+      // Tablet: ~75%. Desktop: use the prop default.
+      const cap = vw < 640 ? 0.7 : vw < 1024 ? 0.75 : 1;
+      const next = Math.round(Math.min(height, vh * cap));
+      // Keep a sensible floor so the canvas doesn't collapse on landscape phones.
+      setRenderHeight(Math.max(360, next));
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, [height]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -36,16 +55,16 @@ export function FriendsClient({ root, height = 680 }: Props) {
   }, []);
 
   return (
-    <div style={{ minHeight: height }}>
+    <div style={{ minHeight: renderHeight }}>
       {state.status === "loaded" ? (
         <FriendGraph<FriendTag>
           root={root}
           friends={state.friends}
           tags={tagRegistry}
-          height={height}
+          height={renderHeight}
         />
       ) : (
-        <LoadingFrame height={height} state={state.status} />
+        <LoadingFrame height={renderHeight} state={state.status} />
       )}
     </div>
   );

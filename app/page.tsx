@@ -19,7 +19,7 @@ export default function Home() {
       <Projects />
       <Hobbies />
       <Friends />
-      <footer className="border-t border-[var(--glass-border)] px-10 py-[60px] text-center">
+      <footer className="border-t border-[var(--glass-border)] px-5 py-10 text-center sm:px-6 md:px-10 md:py-[60px]">
         <div className="text-[13px] text-[var(--ink-faint)]">
           Built by {profile.name.en} · {new Date().getFullYear()}
         </div>

@@ -33,10 +33,10 @@ const caveat = Caveat({
 });
 
 export const metadata: Metadata = {
-  title: `${profile.name.en} — Personal Website`,
+  title: `${profile.name.en}`,
   description: profile.tagline,
   openGraph: {
-    title: `${profile.name.en} — Personal Website`,
+    title: `${profile.name.en}`,
     description: profile.tagline,
     type: "website",
   },

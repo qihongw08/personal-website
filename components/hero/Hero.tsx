@@ -22,7 +22,7 @@ export function Hero() {
   return (
     <section
       id="home"
-      className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-10"
+      className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-5 sm:px-6 md:px-10"
     >
       <div
         aria-hidden
@@ -59,16 +59,16 @@ export function Hero() {
       <motion.button
         onClick={scrollDown}
         initial={{ opacity: 0 }}
-        animate={loaded ? { opacity: 0.4 } : {}}
+        animate={loaded ? { opacity: 0.55 } : {}}
         transition={{ duration: 1.5, delay: 0.5 }}
-        className="absolute bottom-10 flex cursor-pointer flex-col items-center gap-2"
+        className="absolute bottom-6 flex cursor-pointer flex-col items-center gap-2 px-6 py-3 sm:bottom-10"
         aria-label="Scroll to about section"
       >
         <span className="text-[11px] uppercase tracking-[3px] text-[var(--ink-faint)]">
           Scroll
         </span>
         <div
-          className="h-[30px] w-px"
+          className="h-[30px] w-[2px]"
           style={{
             background:
               "linear-gradient(to bottom, var(--ink-faint), transparent)",

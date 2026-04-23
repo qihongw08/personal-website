@@ -1,6 +1,6 @@
 export function SectionHeader({ title }: { title: string }) {
   return (
-    <div className="mb-12 flex items-baseline gap-4">
+    <div className="mb-8 flex items-baseline gap-4 md:mb-12">
       <h2
         className="m-0 font-display font-bold leading-[1.1] text-[var(--ink)]"
         style={{ fontSize: "clamp(32px, 5vw, 48px)" }}

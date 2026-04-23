@@ -70,17 +70,18 @@ function sizeFromAspect(
   aspect: number,
   variant: Variant,
   featured: boolean,
+  scale: number,
 ): Size {
   if (variant === "strip") {
-    const H = 140;
+    const H = Math.round(140 * scale);
     return {
-      w: Math.round(Math.max(110, Math.min(240, H * aspect))),
+      w: Math.round(Math.max(90, Math.min(240, H * aspect))),
       h: H,
     };
   }
-  const shortSide = featured ? 200 : 140;
-  const longSide = featured ? 280 : 200;
-  const squareSide = featured ? 240 : 160;
+  const shortSide = Math.round((featured ? 200 : 140) * scale);
+  const longSide = Math.round((featured ? 280 : 200) * scale);
+  const squareSide = Math.round((featured ? 240 : 160) * scale);
   if (aspect >= 1.1) return { w: longSide, h: shortSide }; // landscape
   if (aspect <= 0.9) return { w: shortSide, h: longSide }; // portrait
   return { w: squareSide, h: squareSide };
@@ -204,6 +205,19 @@ const Polaroid = memo(function Polaroid({
 export function MediaViewer({ media, variant, maxVisible }: Props) {
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [aspects, setAspects] = useState<Record<string, number>>({});
+  // Scale tile presets down on small screens. SSR uses 1; client adjusts on
+  // mount + resize. The flash is cheap because tiles are flex-wrap / overflow-x.
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const compute = () => {
+      const w = window.innerWidth;
+      setScale(w < 480 ? 0.65 : w < 768 ? 0.8 : 1);
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, []);
 
   const onAspect = useCallback((src: string, aspect: number) => {
     setAspects((prev) =>
@@ -272,7 +286,7 @@ export function MediaViewer({ media, variant, maxVisible }: Props) {
         {visible.map((m, i) => {
           const featured = i === 0 && variant === "wall";
           const aspect = aspects[m.src] ?? DEFAULT_ASPECT;
-          const { w, h } = sizeFromAspect(aspect, variant, featured);
+          const { w, h } = sizeFromAspect(aspect, variant, featured, scale);
           return (
             <Polaroid
               key={m.src}
@@ -293,8 +307,8 @@ export function MediaViewer({ media, variant, maxVisible }: Props) {
             onClick={() => setLightbox(cap)}
             className="flex flex-shrink-0 items-center justify-center rounded-md border font-mono text-[11px] text-[var(--ink-muted)] transition-colors hover:text-[var(--ink)]"
             style={{
-              width: 100,
-              height: 130,
+              width: Math.round(100 * scale),
+              height: Math.round(130 * scale),
               background: "rgba(0,0,0,0.03)",
               borderColor: "var(--glass-border)",
               transform: "rotate(-1.5deg)",
@@ -334,7 +348,7 @@ function Lightbox({
   const item = media[index];
   const multiple = media.length > 1;
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-6">
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-3 sm:p-6">
       <button
         type="button"
         aria-label="Close media viewer"
@@ -406,14 +420,14 @@ function Lightbox({
         type="button"
         onClick={onClose}
         aria-label="Close"
-        className="absolute right-6 top-6 z-20 flex h-10 w-10 items-center justify-center rounded-full text-[var(--ink)] transition-colors hover:bg-[rgba(255,255,255,0.6)]"
+        className="absolute right-3 top-3 z-20 flex h-12 w-12 items-center justify-center rounded-full text-[var(--ink)] transition-colors hover:bg-[rgba(255,255,255,0.6)] sm:right-6 sm:top-6 sm:h-10 sm:w-10"
         style={{
           background: "rgba(248,247,244,0.7)",
           backdropFilter: "blur(12px)",
           border: "1px solid var(--glass-border)",
         }}
       >
-        <X size={16} />
+        <X size={18} />
       </button>
 
       {multiple && (
@@ -422,27 +436,27 @@ function Lightbox({
             type="button"
             onClick={onPrev}
             aria-label="Previous"
-            className="absolute left-6 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full text-[var(--ink)] transition-colors hover:bg-[rgba(255,255,255,0.6)]"
+            className="absolute left-2 top-1/2 z-20 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full text-[var(--ink)] transition-colors hover:bg-[rgba(255,255,255,0.6)] sm:left-6 sm:h-10 sm:w-10"
             style={{
               background: "rgba(248,247,244,0.7)",
               backdropFilter: "blur(12px)",
               border: "1px solid var(--glass-border)",
             }}
           >
-            <ChevronLeft size={18} />
+            <ChevronLeft size={20} />
           </button>
           <button
             type="button"
             onClick={onNext}
             aria-label="Next"
-            className="absolute right-6 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full text-[var(--ink)] transition-colors hover:bg-[rgba(255,255,255,0.6)]"
+            className="absolute right-2 top-1/2 z-20 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full text-[var(--ink)] transition-colors hover:bg-[rgba(255,255,255,0.6)] sm:right-6 sm:h-10 sm:w-10"
             style={{
               background: "rgba(248,247,244,0.7)",
               backdropFilter: "blur(12px)",
               border: "1px solid var(--glass-border)",
             }}
           >
-            <ChevronRight size={18} />
+            <ChevronRight size={20} />
           </button>
         </>
       )}
