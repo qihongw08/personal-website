@@ -11,7 +11,7 @@ export function Friends() {
     >
       <FadeInWhenVisible>
         <SectionHeader title="Friends" />
-        <div className="glass-card overflow-hidden rounded-2xl px-4 py-6">
+        <div className="glass-card overflow-hidden rounded-2xl px-1 py-3 sm:px-4 sm:py-6">
           <FriendsClient
             root={{
               name: profile.name.en,
@@ -22,8 +22,10 @@ export function Friends() {
           />
         </div>
         <p className="mt-3 text-center text-xs text-[var(--ink-faint)]">
-          <span className="hidden md:inline">Scroll to zoom · Drag to pan</span>
-          <span className="md:hidden">Drag to explore</span>
+          <span className="hidden md:inline">
+            Click to interact · Scroll to zoom · Drag to pan · Esc to exit
+          </span>
+          <span className="md:hidden">Tap to interact · Drag to explore</span>
         </p>
       </FadeInWhenVisible>
     </section>

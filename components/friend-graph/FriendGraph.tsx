@@ -97,12 +97,14 @@ function Avatar({
 function FriendTile<T extends string>({
   node,
   hovered,
+  engaged,
   onHover,
   onNodePointerDown,
   onSuppressClick,
 }: {
   node: FriendGraphNode<T>;
   hovered: boolean;
+  engaged: boolean;
   onHover: (id: string | null) => void;
   onNodePointerDown: (e: React.PointerEvent<HTMLElement>, id: string) => void;
   onSuppressClick: (id: string) => boolean;
@@ -122,10 +124,12 @@ function FriendTile<T extends string>({
     padding: 12,
     gap: 8,
     borderRadius: TILE_RADIUS,
-    cursor: "grab",
+    cursor: engaged ? "grab" : "pointer",
     transform: hovered ? "translateY(-3px)" : "translateY(0)",
     transition: "transform 0.2s ease, box-shadow 0.2s ease",
-    touchAction: "none",
+    // Until engaged, let touch gestures pan the page vertically; once engaged
+    // the tile fully owns pointer gestures for drag-to-move.
+    touchAction: engaged ? "none" : "pan-y",
     ...glassStyle,
     boxShadow: hovered
       ? `0 10px 28px ${accent}33, inset 0 1px 0 rgba(255,255,255,0.55)`
@@ -231,11 +235,13 @@ function FriendTile<T extends string>({
 function RootTile<T extends string>({
   node,
   accent,
+  engaged,
   onNodePointerDown,
   onSuppressClick,
 }: {
   node: RootGraphNode;
   accent: string;
+  engaged: boolean;
   onNodePointerDown: (e: React.PointerEvent<HTMLElement>, id: string) => void;
   onSuppressClick: (id: string) => boolean;
   _t?: T;
@@ -253,8 +259,8 @@ function RootTile<T extends string>({
     padding: 14,
     gap: 10,
     borderRadius: ROOT_RADIUS,
-    cursor: "grab",
-    touchAction: "none",
+    cursor: engaged ? "grab" : "pointer",
+    touchAction: engaged ? "none" : "pan-y",
     ...glassStyle,
     boxShadow: `0 0 0 2px ${accent}55, 0 10px 32px ${accent}2e, inset 0 1px 0 rgba(255,255,255,0.55)`,
   };
@@ -358,10 +364,18 @@ export function FriendGraph<T extends string = string>({
   const [view, setView] = useState<ViewState>({ tx: 0, ty: 0, scale: 1 });
   const [panning, setPanning] = useState(false);
   const [positions, setPositions] = useState<Record<string, Vec>>({});
+  // Engagement gates wheel-zoom + touch capture so the graph doesn't steal
+  // page scroll. User clicks/taps the canvas to engage; clicking outside or
+  // pressing Escape disengages.
+  const [engaged, setEngaged] = useState(false);
 
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const suppressClickRef = useRef<Set<string>>(new Set());
+  // Flips true once the user manually zooms, so container resize doesn't
+  // snap them back to the auto-fit scale.
+  const userZoomedRef = useRef(false);
 
   const baseLayout = useMemo(
     () => computeGraph<T>(root, friends as FriendNode<T>[], tags),
@@ -384,13 +398,17 @@ export function FriendGraph<T extends string = string>({
 
   const rootAccent = "var(--brand, #0891b2)";
 
-  // Wheel zoom centered on cursor. React's onWheel is passive, so attach
-  // manually with passive:false to cancel page scroll.
+  // Wheel zoom centered on cursor. Only active when the graph is engaged —
+  // otherwise wheel events pass through to the page so the user can scroll
+  // past the section without getting stuck in the graph. React's onWheel is
+  // passive, so attach manually with passive:false to cancel page scroll
+  // once engagement is confirmed.
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg) return;
 
     const onWheel = (e: WheelEvent) => {
+      if (!engaged) return;
       e.preventDefault();
       const rect = svg.getBoundingClientRect();
       const aspectScale = Math.min(
@@ -405,6 +423,7 @@ export function FriendGraph<T extends string = string>({
       const cursorY =
         (e.clientY - rect.top - offsetY) / aspectScale + baseLayout.viewBox.y;
 
+      userZoomedRef.current = true;
       setView((v) => {
         const factor = Math.exp(-e.deltaY * 0.0015);
         const newScale = Math.max(MIN_SCALE, v.scale * factor);
@@ -420,11 +439,67 @@ export function FriendGraph<T extends string = string>({
     svg.addEventListener("wheel", onWheel, { passive: false });
     return () => svg.removeEventListener("wheel", onWheel);
   }, [
+    engaged,
     baseLayout.viewBox.x,
     baseLayout.viewBox.y,
     baseLayout.viewBox.width,
     baseLayout.viewBox.height,
   ]);
+
+  // Disengage when user clicks outside the graph or presses Escape, so the
+  // page can scroll freely again.
+  useEffect(() => {
+    if (!engaged) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const el = containerRef.current;
+      if (!el) return;
+      if (!el.contains(e.target as Node)) setEngaged(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setEngaged(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [engaged]);
+
+  // Auto-fit the content into narrow containers so tiles don't become
+  // unreadably small on phones. We aim for an on-screen tile roughly
+  // TARGET_TILE_PX wide; the viewBox-fit path alone shrinks tiles to illegible
+  // sizes on phones because the viewBox is sized for the full graph. We re-fit
+  // on container resize but only while the user hasn't manually zoomed.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const TARGET_TILE_PX = 96;
+    const TILE_VIEWBOX_WIDTH = 120;
+    const fit = () => {
+      if (userZoomedRef.current) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      // Only boost on narrow viewports. On desktop, the natural viewBox fit
+      // already renders tiles at full size.
+      if (rect.width >= 640) {
+        setView((v) => (v.scale === 1 ? v : { ...v, scale: 1 }));
+        return;
+      }
+      const aspectScale = Math.min(
+        rect.width / baseLayout.viewBox.width,
+        (rect.height || 1) / baseLayout.viewBox.height,
+      );
+      if (!isFinite(aspectScale) || aspectScale <= 0) return;
+      const target = TARGET_TILE_PX / (TILE_VIEWBOX_WIDTH * aspectScale);
+      const clamped = Math.max(1, Math.min(4, target));
+      setView((v) => (v.scale === clamped ? v : { ...v, scale: clamped }));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [baseLayout.viewBox.width, baseLayout.viewBox.height]);
 
   const screenDeltaToViewBox = (dxScreen: number, dyScreen: number) => {
     const svg = svgRef.current;
@@ -449,6 +524,10 @@ export function FriendGraph<T extends string = string>({
     // Stop bubbling so the SVG's pointerdown doesn't start a pan at the
     // same time the user starts dragging a node.
     e.stopPropagation();
+    // Before engagement on touch: don't capture — let the browser interpret
+    // the gesture as a vertical scroll (via touch-action: pan-y). The link
+    // tap still works because pointerup fires normally.
+    if (!engaged && e.pointerType === "touch") return;
     dragRef.current = {
       kind: "node",
       id,
@@ -468,6 +547,10 @@ export function FriendGraph<T extends string = string>({
     const target = e.target as Element;
     if (target.closest("[data-node-id]")) return; // handled by node handler
     if (target.closest("a, button, input")) return;
+    // Touch users can still use a vertical-swipe gesture to scroll past the
+    // section because touch-action: pan-y is on the SVG when not engaged;
+    // we only start panning for mouse or once engaged.
+    if (!engaged && e.pointerType === "touch") return;
     dragRef.current = {
       kind: "pan",
       pointerId: e.pointerId,
@@ -593,11 +676,17 @@ export function FriendGraph<T extends string = string>({
 
   return (
     <div
+      ref={containerRef}
       className={className}
+      onClick={() => {
+        if (!engaged) setEngaged(true);
+      }}
       style={{
         width: "100%",
         position: "relative",
-        touchAction: "none",
+        // When not engaged, allow vertical page scroll to pass through touch
+        // gestures on the graph. Once engaged, the graph claims the gesture.
+        touchAction: engaged ? "none" : "pan-y",
       }}
     >
       <svg
@@ -615,8 +704,9 @@ export function FriendGraph<T extends string = string>({
           height,
           display: "block",
           overflow: "hidden",
-          cursor: panning ? "grabbing" : "grab",
+          cursor: panning ? "grabbing" : engaged ? "grab" : "pointer",
           userSelect: "none",
+          touchAction: engaged ? "none" : "pan-y",
         }}
       >
         <rect
@@ -818,6 +908,7 @@ export function FriendGraph<T extends string = string>({
                   key={n.id}
                   node={n}
                   accent={rootAccent}
+                  engaged={engaged}
                   onNodePointerDown={onNodePointerDown}
                   onSuppressClick={consumeClickSuppression}
                 />
@@ -826,6 +917,7 @@ export function FriendGraph<T extends string = string>({
                   key={n.id}
                   node={n}
                   hovered={hoveredId === n.friend.id}
+                  engaged={engaged}
                   onHover={setHoveredId}
                   onNodePointerDown={onNodePointerDown}
                   onSuppressClick={consumeClickSuppression}
@@ -835,6 +927,14 @@ export function FriendGraph<T extends string = string>({
           </motion.g>
         </g>
       </svg>
+      {!engaged ? (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute right-3 bottom-3 rounded-full border border-[var(--glass-border,rgba(255,255,255,0.55))] bg-[var(--glass-bg,rgba(248,247,244,0.72))] px-3 py-1.5 font-mono text-[10px] tracking-[1.5px] text-[var(--ink-muted,rgba(26,26,46,0.64))] uppercase backdrop-blur-md"
+        >
+          Click to interact
+        </div>
+      ) : null}
     </div>
   );
 }
