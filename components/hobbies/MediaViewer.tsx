@@ -138,13 +138,11 @@ const Polaroid = memo(function Polaroid({
           style={{ height, background: "rgba(0,0,0,0.06)" }}
         >
           {item.type === "video" ? (
-            // `#t=0.1` renders the frame at 0.1s as a poster-like thumbnail,
-            // avoiding the black-frame default that preload="metadata" gives.
             <video
               src={`${item.src}#t=0.1`}
               muted
               playsInline
-              preload="metadata"
+              preload="none"
               onLoadedMetadata={(e) => {
                 const v = e.currentTarget;
                 if (v.videoWidth && v.videoHeight) {
