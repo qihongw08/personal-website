@@ -13,9 +13,7 @@ export const profile = {
 
   bio: {
     intro:
-      "I'm a Computer Science student at Northeastern who likes building things that work well and feel right. I've shipped search infrastructure at Onshape/PTC, automated reporting pipelines at State Street, and won the Entertainment track at HackMIT 2025.",
-    offClock:
-      "Off the clock — badminton courts, mountain trails, and way too many hours curating playlists. I believe good software is invisible and good music isn't.",
+      "Hey, I'm Qihong! I'm a CS + Business student at Northeastern University. I love to build random things. You'll catch me at a hackathon and tinkering on side projects just for my own sake. More seriously, I've shipped search infrastructure at Onshape/PTC, automated reporting pipelines at State Street, and currently doing quant research/dev at Morgan Stanley.",
   },
 
   education: [
@@ -31,11 +29,20 @@ export const profile = {
     },
   ],
 
-  skills: {
-    Languages: ["Java", "Python", "TypeScript", "SQL"],
-    Frameworks: ["Spring", "React", "FastAPI", "Express"],
-    Tools: ["Docker", "K8s", "Elasticsearch", "MongoDB"],
-  },
+  skills: [
+    { name: "Java", icon: "java" },
+    { name: "Python", icon: "python" },
+    { name: "TypeScript", icon: "typescript" },
+    { name: "SQL", icon: "sql" },
+    { name: "Spring", icon: "spring" },
+    { name: "React", icon: "react" },
+    { name: "FastAPI", icon: "fastapi" },
+    { name: "Express", icon: "express" },
+    { name: "Docker", icon: "docker" },
+    { name: "Kubernetes", icon: "kubernetes" },
+    { name: "Elasticsearch", icon: "elasticsearch" },
+    { name: "MongoDB", icon: "mongodb" },
+  ],
 
   socials: {
     github: {
@@ -52,7 +59,7 @@ export const profile = {
     },
   },
 
-  profilePhoto: null as string | null,
+  profilePhoto: asset("profile_image.jpg"),
 
   resumePath: asset("resume.pdf"),
 } as const;

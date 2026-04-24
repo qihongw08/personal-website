@@ -21,9 +21,14 @@ export function CommitGraph() {
   return (
     <div className="glass-card rounded-xl px-6 py-5">
       <div className="mb-4 flex items-center justify-between"> 
-        <span className="font-mono text-[11px] text-[var(--ink-faint)]">
+        <a
+          href={profile.socials.github.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-mono text-[11px] text-[var(--ink-faint)] transition-colors hover:text-[var(--brand)]"
+        >
           github.com/{profile.socials.github.handle}
-        </span>
+        </a>
       </div>
       <GitHubCalendar
         username={profile.socials.github.handle}
@@ -35,10 +40,10 @@ export function CommitGraph() {
         theme={{
           light: [
             "rgba(0,0,0,0.04)",
-            "rgba(8,145,178,0.15)",
-            "rgba(8,145,178,0.3)",
-            "rgba(8,145,178,0.5)",
-            "rgba(8,145,178,0.75)",
+            "#a7e8c9",
+            "#4dceaa",
+            "#1cb389",
+            "#0a8562",
           ],
         }}
       />

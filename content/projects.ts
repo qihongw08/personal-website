@@ -52,7 +52,7 @@ export const projects: Project[] = [
     name: "EyeCraft",
     status: "Archived",
     description:
-      "Real-time communication bridge between a Python CV pipeline and Java — enabling hands-free Minecraft control for users with mobility impairments through facial expressions and head movements.",
+      "Hands-free Minecraft for players with mobility impairments. A Python CV pipeline reads facial expressions and head movement, streaming them to a Java mod in real time.",
     tags: ["Java", "Python", "OpenCV", "ML"],
     source: { kind: "single", owner: "qihongw08", repo: "eyecraft-mod" },
     activityRange: "2025/09/13-2025/09/15",
@@ -61,7 +61,7 @@ export const projects: Project[] = [
     name: "Shuttleverse",
     status: "Archived",
     description:
-      "Crowdsourcing platform for badminton players to discover courts and coaches. Microservices architecture with API gateway, service discovery, and centralized auth.",
+      "A crowdsourced directory of badminton courts and coaches. Microservices architecture with API Gateway, Service Discovery, Websockets, and centralized authentication.",
     tags: ["Spring Boot", "Redis", "K8s", "Microservices"],
     source: {
       kind: "aggregate",
@@ -80,7 +80,7 @@ export const projects: Project[] = [
     name: "Restaumap",
     status: "Deployed",
     description:
-      "Interactive restaurant map — discover spots, filter by cuisine, save favorites. TypeScript, deployed on Vercel.",
+      "Paste a Xiaohongshu or Instagram link and Restaumap extracts the restaurant info into your collection. Interactive map showing extracted restaurants and logs. Create groups so friends can save and log places together.",
     tags: ["TypeScript", "Next.js", "Mapbox"],
     source: { kind: "single", owner: "qihongw08", repo: "restaumap" },
     liveUrl: "https://restaumap.us",
@@ -89,7 +89,7 @@ export const projects: Project[] = [
     name: "Karp",
     status: "Archived",
     description:
-      "Gamified volunteer platform connecting non-profits with volunteers. Built with Generate Product Development Studio in a cross-functional team of 13.",
+      "Incentivizes volunteers with in-app currency they can exchange for real rewards. Shipped with Generate Product Studio in a 13-person cross-functional team.",
     tags: ["FastAPI", "React Native", "MongoDB"],
     source: {
       kind: "aggregate",

@@ -153,16 +153,16 @@ export function Career() {
                           padding: "2px 8px",
                           background:
                             exp.status === "Active"
-                              ? "rgba(8,145,178,0.08)"
+                              ? "rgba(10,133,98,0.1)"
                               : "rgba(0,0,0,0.03)",
                           border: `1px solid ${
                             exp.status === "Active"
-                              ? "rgba(8,145,178,0.2)"
+                              ? "rgba(10,133,98,0.3)"
                               : "var(--glass-border)"
                           }`,
                           color:
                             exp.status === "Active"
-                              ? "var(--brand)"
+                              ? "#0a8562"
                               : "var(--ink-faint)",
                         }}
                       >
@@ -183,7 +183,7 @@ export function Career() {
                         {b}
                       </div>
                     ))}
-                    <div className="mt-3.5 flex gap-1.5">
+                    <div className="mt-3.5 flex flex-wrap gap-1.5">
                       {exp.tags.map((t) => (
                         <span
                           key={t}
@@ -204,13 +204,13 @@ export function Career() {
 
               <div
                 aria-hidden
-                className="absolute left-[14px] top-5 z-[3] -translate-x-1/2 lg:left-1/2"
+                className="absolute left-[14px] top-1/2 z-[3] -translate-x-1/2 -translate-y-1/2 lg:left-1/2"
               >
                 {/* Pulsing ring — signals Active roles are still in progress */}
                 {exp.status === "Active" && !reduceMotion && (
                   <motion.span
                     className="absolute left-1/2 top-1/2 h-[11px] w-[11px] -translate-x-1/2 -translate-y-1/2 rounded-full"
-                    style={{ background: "var(--brand)" }}
+                    style={{ background: "#1cb389" }}
                     animate={{ scale: [1, 2.2], opacity: [0.45, 0] }}
                     transition={{
                       duration: 2,
@@ -224,11 +224,11 @@ export function Career() {
                   style={{
                     background:
                       exp.status === "Active"
-                        ? "var(--brand)"
+                        ? "#1cb389"
                         : "var(--ink-faint)",
                     boxShadow:
                       exp.status === "Active"
-                        ? "0 0 12px rgba(8,145,178,0.4)"
+                        ? "0 0 12px rgba(28,179,137,0.45)"
                         : "none",
                     border: "2px solid var(--surface)",
                   }}

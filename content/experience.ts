@@ -10,17 +10,30 @@ export type Experience = {
 
 export const experience: Experience[] = [
   {
-    role: "Software Engineering Co-op",
-    company: "State Street × NU",
-    period: "Jan – Jun 2025",
+    role: "Quantitative Research Associate Co-op",
+    company: "Morgan Stanley – Parametric",
+    period: "Jan 2026 – Present",
+    status: "Active",
+    description:
+      "Automating fixed-income client reporting and LLM credit analysis for Parametric's portfolio managers.",
+    bullets: [
+      "Automated the client Advisor Report, cutting a 2h+ per-client workflow to minutes and unlocking live use in client meetings.",
+      "Built a credit analysis agent workflow on bond holdings, iteratively self-refining prompts across ~20 bond sectors from scored feedback.",
+    ],
+    tags: ["Python", "SQL", "Snowflake", "Streamlit", "LLM"],
+  },
+  {
+    role: "Software Engineer",
+    company: "Generate Product Development Studio",
+    period: "Sep – Dec 2025",
     status: "Archived",
     description:
-      "Engineered automated KPI reporting dashboard saving 150+ hours/month of manual work.",
+      "Built Karp, a gamified volunteer platform connecting non-profits with volunteers in a cross-functional team of 13.",
     bullets: [
-      "Modular ETL pipeline in Databricks processing 1M+ rows from 15+ teams.",
-      "Improved efficiency 60% via multi-threading mechanism.",
+      "Shipped end-to-end features across a React Native mobile app and React web dashboard for 3+ user roles.",
+      "Built backend systems with FastAPI and MongoDB for event management and role-based access.",
     ],
-    tags: ["Databricks", "Python", "ETL"],
+    tags: ["React Native", "FastAPI", "MongoDB"],
   },
   {
     role: "Software Engineering Intern",
@@ -36,16 +49,16 @@ export const experience: Experience[] = [
     tags: ["Elasticsearch", "Spring", "Java"],
   },
   {
-    role: "Software Engineer",
-    company: "Generate Product Development Studio",
-    period: "Sep 2025 – Present",
-    status: "Active",
+    role: "Software Engineering Co-op",
+    company: "State Street × NU",
+    period: "Jan – Jun 2025",
+    status: "Archived",
     description:
-      "Building Karp — a gamified volunteer platform connecting non-profits with volunteers in a cross-functional team of 13.",
+      "Engineered automated KPI reporting dashboard saving 150+ hours/month of manual work.",
     bullets: [
-      "End-to-end features across React Native mobile & React web dashboard for 3+ user roles.",
-      "Backend systems with FastAPI and MongoDB for event management and role-based access.",
+      "Modular ETL pipeline in Databricks processing 1M+ rows from 15+ teams.",
+      "Improved efficiency 60% via multi-threading mechanism.",
     ],
-    tags: ["React Native", "FastAPI", "MongoDB"],
+    tags: ["Databricks", "Python", "ETL"],
   },
 ];
