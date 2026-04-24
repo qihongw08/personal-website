@@ -40,7 +40,7 @@ All colors are defined as CSS custom properties in `app/globals.css`. Use token 
 |---|---|---|
 | `--ink` | `#1a1a2e` | Primary text: headings, emphasized body |
 | `--ink-muted` | `rgba(26,26,46,0.72)` | Secondary text: body prose, descriptions |
-| `--ink-faint` | `rgba(26,26,46,0.52)` | Tertiary text: captions, meta, placeholders |
+| `--ink-faint` | `rgba(26,26,46,0.66)` | Tertiary text: captions, meta, placeholders (tuned to meet WCAG AA 4.5:1 on both the cream surface and glass cards) |
 
 ### Status Palette
 Used for project cards and state pills. Defined in `content/projects.ts`:
@@ -240,7 +240,7 @@ Opacity + overlay are tuned so the painting reads as atmosphere, not a photograp
 
 ## Accessibility
 
-- All text must meet WCAG AA against `--surface`. `--ink-faint` (0.3 alpha) is at floor — use only for non-essential decorative text.
+- All text must meet WCAG AA against `--surface` and glass-card surfaces. `--ink-faint` (0.66 alpha) is the floor — it clears 4.5:1 on both the cream surface and glass over the guóhuà backdrop. Do not drop text opacity below it; use lighter weights or smaller size if you need more visual recession.
 - Canvas animations (`FriendsGraph`) must respect `prefers-reduced-motion: reduce`.
 - Focus rings: `--ring` via `outline-ring/50` Tailwind utility. Never `outline: none`.
 - Alt text on every `<Image>`. Empty `alt=""` on decorative SVG / canvas with `aria-hidden`.

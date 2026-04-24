@@ -68,7 +68,7 @@
   --surface: #f8f7f4;
   --ink: #1a1a2e;
   --ink-muted: rgba(26, 26, 46, 0.72);
-  --ink-faint: rgba(26, 26, 46, 0.52);
+  --ink-faint: rgba(26, 26, 46, 0.66);
   /* Liquid-glass surfaces — cream tint + heavy backdrop blur.
      Cards using `.glass-card` utility pick up the blur + saturate
      automatically. Inline bg-[var(--glass-bg)] still works too. */
