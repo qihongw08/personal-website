@@ -21,22 +21,10 @@ export async function LeagueCard() {
               LEAGUE_OF_LEGENDS
             </div>
             <h3 className="m-0 font-display text-[22px] font-bold text-[var(--ink)]">
-              <a
-                href={opggUrl(
-                  lol.platform,
-                  profile?.account.gameName ?? lol.gameName,
-                  profile?.account.tagLine ?? lol.tagLine,
-                )}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="transition-colors hover:text-[var(--brand)]"
-                title="View on op.gg"
-              >
-                {profile?.account.gameName ?? lol.gameName}
-                <span className="ml-1 text-[var(--ink-faint)]">
-                  #{profile?.account.tagLine ?? lol.tagLine}
-                </span>
-              </a>
+              {profile?.account.gameName ?? lol.gameName}
+              <span className="ml-1 text-[var(--ink-faint)]">
+                #{profile?.account.tagLine ?? lol.tagLine}
+              </span>
             </h3>
             {profile?.summoner.summonerLevel && (
               <div className="mt-0.5 font-mono text-[10px] tracking-[1px] text-[var(--ink-muted)]">
@@ -79,14 +67,37 @@ export async function LeagueCard() {
               </div>
             )}
           </div>
-          {profile === null && (
-            <span
-              className="font-mono text-[9px] tracking-[1px] text-[var(--ink-faint)]"
-              title="Set RIOT_API_KEY in .env.local to enable live data"
+          <div className="flex items-center gap-2">
+            {profile === null && (
+              <span
+                className="font-mono text-[9px] tracking-[1px] text-[var(--ink-faint)]"
+                title="Set RIOT_API_KEY in .env.local to enable live data"
+              >
+                OFFLINE
+              </span>
+            )}
+            <a
+              href={opggUrl(
+                lol.platform,
+                profile?.account.gameName ?? lol.gameName,
+                profile?.account.tagLine ?? lol.tagLine,
+              )}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="View on op.gg"
+              aria-label="View on op.gg"
+              className="flex h-8 items-center rounded-lg border border-[var(--glass-border)] px-2 transition-all hover:border-[var(--glass-border-hover)] hover:bg-[rgba(0,0,0,0.04)]"
+              style={{ background: "rgba(0,0,0,0.03)" }}
             >
-              OFFLINE
-            </span>
-          )}
+              <Image
+                src="/logos/opgg.png"
+                alt="op.gg"
+                width={2048}
+                height={1331}
+                className="h-4 w-auto"
+              />
+            </a>
+          </div>
         </div>
 
         {/* Current rank */}

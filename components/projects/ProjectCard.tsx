@@ -1,4 +1,4 @@
-import { ArrowUpRight, Globe } from "lucide-react";
+import { Globe } from "lucide-react";
 import { STATUS_COLORS, type Project } from "@/content/projects";
 import type { ActivityBuckets } from "@/lib/github";
 import { MiniActivityGraph } from "./MiniActivityGraph";
@@ -56,7 +56,7 @@ export function ProjectCard({ project, stats, linkUrl }: ProjectCardProps) {
             style={{ background: "rgba(0,0,0,0.03)" }}
             aria-label={`Open ${project.name} on GitHub`}
           >
-            <ArrowUpRight size={14} />
+            <GithubMark size={14} />
           </a>
         </div>
       </div>
@@ -84,6 +84,21 @@ export function ProjectCard({ project, stats, linkUrl }: ProjectCardProps) {
         </div>
       </div>
     </div>
+  );
+}
+
+function GithubMark({ size }: { size: number }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="currentColor"
+      aria-hidden
+    >
+      <path d="M12 .5C5.73.5.67 5.56.67 11.83c0 5.01 3.25 9.26 7.76 10.76.57.1.78-.25.78-.55 0-.27-.01-.99-.02-1.95-3.16.69-3.82-1.52-3.82-1.52-.52-1.31-1.26-1.66-1.26-1.66-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.01 1.74 2.66 1.24 3.31.95.1-.73.4-1.24.72-1.52-2.52-.29-5.17-1.26-5.17-5.6 0-1.24.44-2.25 1.17-3.04-.12-.29-.51-1.44.11-3 0 0 .95-.3 3.12 1.16a10.83 10.83 0 0 1 5.68 0c2.17-1.46 3.12-1.16 3.12-1.16.62 1.56.23 2.71.11 3 .73.79 1.17 1.8 1.17 3.04 0 4.35-2.66 5.3-5.19 5.59.41.35.77 1.04.77 2.1 0 1.52-.01 2.74-.01 3.11 0 .3.2.66.79.55 4.51-1.5 7.76-5.75 7.76-10.76C23.33 5.56 18.27.5 12 .5z" />
+    </svg>
   );
 }
 
