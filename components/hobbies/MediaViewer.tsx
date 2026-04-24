@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, Play, X } from "lucide-react";
 import type { Media } from "@/lib/media";
@@ -317,15 +318,18 @@ export function MediaViewer({ media, variant, maxVisible }: Props) {
         )}
       </div>
 
-      {lightbox !== null && (
-        <Lightbox
-          media={media}
-          index={lightbox}
-          onClose={close}
-          onPrev={prev}
-          onNext={next}
-        />
-      )}
+      {lightbox !== null &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <Lightbox
+            media={media}
+            index={lightbox}
+            onClose={close}
+            onPrev={prev}
+            onNext={next}
+          />,
+          document.body,
+        )}
     </>
   );
 }

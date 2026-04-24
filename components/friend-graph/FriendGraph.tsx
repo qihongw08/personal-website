@@ -33,11 +33,10 @@ function initialsOf(name: string): string {
 }
 
 const glassStyle: React.CSSProperties = {
-  background: "var(--graph-tile-bg, var(--glass-bg, rgba(248,247,244,0.7)))",
+  background:
+    "var(--graph-tile-bg, var(--glass-bg-hover, rgba(248,247,244,0.88)))",
   border:
     "1px solid var(--graph-tile-border, var(--glass-border, rgba(255,255,255,0.55)))",
-  backdropFilter: "blur(20px) saturate(1.3)",
-  WebkitBackdropFilter: "blur(20px) saturate(1.3)",
   boxShadow:
     "0 8px 24px rgba(26,26,46,0.08), inset 0 1px 0 rgba(255,255,255,0.55)",
 };
@@ -125,8 +124,16 @@ function FriendTile<T extends string>({
     gap: 8,
     borderRadius: TILE_RADIUS,
     cursor: engaged ? "grab" : "pointer",
-    transform: hovered ? "translateY(-3px)" : "translateY(0)",
-    transition: "transform 0.2s ease, box-shadow 0.2s ease",
+    // Only set `transform` when actually hovered. Applying a CSS transform
+    // (even an identity `translateY(0)`) to an element inside a
+    // `<foreignObject>` trips a WebKit/iOS bug where the element stops
+    // inheriting the parent SVG's scale and renders at its raw CSS pixel
+    // size — which blew friend tiles up to ~3× their intended size on
+    // mobile and pushed them off-screen. The RootTile has no transform,
+    // which is why it scales correctly. Hover only fires on pointer:fine
+    // devices, so touch users never hit this path.
+    transition: "box-shadow 0.2s ease",
+    ...(hovered ? { transform: "translateY(-3px)", transitionProperty: "transform, box-shadow" } : null),
     // Until engaged, let touch gestures pan the page vertically; once engaged
     // the tile fully owns pointer gestures for drag-to-move.
     touchAction: engaged ? "none" : "pan-y",
@@ -376,6 +383,28 @@ export function FriendGraph<T extends string = string>({
   // Flips true once the user manually zooms, so container resize doesn't
   // snap them back to the auto-fit scale.
   const userZoomedRef = useRef(false);
+  // Live map of active touch pointers, used to detect two-finger pinch.
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  // While set, two fingers are down and we're zooming/panning around their
+  // midpoint instead of running a node/pan drag.
+  const pinchRef = useRef<{
+    startDist: number;
+    startScale: number;
+    contentMid: { x: number; y: number };
+  } | null>(null);
+  // Narrow viewport flag — used to disable expensive continuous animations
+  // (water ripples) on mobile where compositing is already strained by the
+  // foreignObject tiles + tag-blob blur filter.
+  const [isNarrow, setIsNarrow] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 640px)");
+    const update = () => setIsNarrow(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
 
   const baseLayout = useMemo(
     () => computeGraph<T>(root, friends as FriendNode<T>[], tags),
@@ -466,40 +495,34 @@ export function FriendGraph<T extends string = string>({
     };
   }, [engaged]);
 
-  // Auto-fit the content into narrow containers so tiles don't become
-  // unreadably small on phones. We aim for an on-screen tile roughly
-  // TARGET_TILE_PX wide; the viewBox-fit path alone shrinks tiles to illegible
-  // sizes on phones because the viewBox is sized for the full graph. We re-fit
-  // on container resize but only while the user hasn't manually zoomed.
+  // Reset to the natural viewBox fit whenever the graph/viewport changes and
+  // the user hasn't manually zoomed. Any zoom factor > 1 on a narrow screen
+  // pushes edge friends outside the viewBox (graph bbox ≈ viewBox by
+  // construction), so we render at scale 1 and let users pinch in to inspect
+  // individual tiles — that keeps every friend on screen at first glance,
+  // and the pinch gesture we added below fills the "I want to read a name"
+  // need without clipping anything.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const TARGET_TILE_PX = 96;
-    const TILE_VIEWBOX_WIDTH = 120;
     const fit = () => {
       if (userZoomedRef.current) return;
-      const rect = el.getBoundingClientRect();
-      if (rect.width <= 0) return;
-      // Only boost on narrow viewports. On desktop, the natural viewBox fit
-      // already renders tiles at full size.
-      if (rect.width >= 640) {
-        setView((v) => (v.scale === 1 ? v : { ...v, scale: 1 }));
-        return;
-      }
-      const aspectScale = Math.min(
-        rect.width / baseLayout.viewBox.width,
-        (rect.height || 1) / baseLayout.viewBox.height,
+      setView((v) =>
+        v.scale === 1 && v.tx === 0 && v.ty === 0
+          ? v
+          : { tx: 0, ty: 0, scale: 1 },
       );
-      if (!isFinite(aspectScale) || aspectScale <= 0) return;
-      const target = TARGET_TILE_PX / (TILE_VIEWBOX_WIDTH * aspectScale);
-      const clamped = Math.max(1, Math.min(4, target));
-      setView((v) => (v.scale === clamped ? v : { ...v, scale: clamped }));
     };
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [baseLayout.viewBox.width, baseLayout.viewBox.height]);
+  }, [
+    baseLayout.viewBox.x,
+    baseLayout.viewBox.y,
+    baseLayout.viewBox.width,
+    baseLayout.viewBox.height,
+  ]);
 
   const screenDeltaToViewBox = (dxScreen: number, dyScreen: number) => {
     const svg = svgRef.current;
@@ -515,6 +538,86 @@ export function FriendGraph<T extends string = string>({
     };
   };
 
+  // Convert a screen (client) point to viewBox coords, accounting for the
+  // xMidYMid meet centering applied by preserveAspectRatio.
+  const clientToViewBox = (clientX: number, clientY: number) => {
+    const svg = svgRef.current;
+    if (!svg) return { x: 0, y: 0 };
+    const rect = svg.getBoundingClientRect();
+    const aspectScale = Math.min(
+      rect.width / baseLayout.viewBox.width,
+      rect.height / baseLayout.viewBox.height,
+    );
+    const offsetX = (rect.width - baseLayout.viewBox.width * aspectScale) / 2;
+    const offsetY = (rect.height - baseLayout.viewBox.height * aspectScale) / 2;
+    return {
+      x: (clientX - rect.left - offsetX) / aspectScale + baseLayout.viewBox.x,
+      y: (clientY - rect.top - offsetY) / aspectScale + baseLayout.viewBox.y,
+    };
+  };
+
+  // Register a touch pointer. Returns true if this pointer triggers pinch
+  // mode (caller should skip starting a single-finger drag/pan).
+  const trackTouchPointer = (
+    pointerId: number,
+    clientX: number,
+    clientY: number,
+  ): boolean => {
+    pointersRef.current.set(pointerId, { x: clientX, y: clientY });
+    if (pointersRef.current.size < 2) return false;
+    // Entering pinch mode — cancel any in-progress single-finger drag.
+    if (dragRef.current) {
+      dragRef.current = null;
+      setPanning(false);
+    }
+    const pts = [...pointersRef.current.values()].slice(0, 2);
+    const [p1, p2] = pts;
+    const startDist = Math.max(1, Math.hypot(p1.x - p2.x, p1.y - p2.y));
+    const midVB = clientToViewBox((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+    // Content-space point anchored under the midpoint. We keep this point
+    // glued to the current midpoint throughout the gesture.
+    const contentMid = {
+      x: (midVB.x - view.tx) / view.scale,
+      y: (midVB.y - view.ty) / view.scale,
+    };
+    pinchRef.current = {
+      startDist,
+      startScale: view.scale,
+      contentMid,
+    };
+    userZoomedRef.current = true;
+    // Pinch is a clear "interact with graph" intent — auto-engage so the
+    // user doesn't need a prior tap, and so touch-action: none claims
+    // subsequent gestures.
+    if (!engaged) setEngaged(true);
+    return true;
+  };
+
+  const updatePinch = () => {
+    const pinch = pinchRef.current;
+    if (!pinch) return;
+    const pts = [...pointersRef.current.values()].slice(0, 2);
+    if (pts.length < 2) return;
+    const [p1, p2] = pts;
+    const dist = Math.max(1, Math.hypot(p1.x - p2.x, p1.y - p2.y));
+    const midVB = clientToViewBox((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+    const newScale = Math.max(
+      MIN_SCALE,
+      pinch.startScale * (dist / pinch.startDist),
+    );
+    // Keep contentMid glued to midVB: midVB = contentMid * newScale + t.
+    setView({
+      tx: midVB.x - pinch.contentMid.x * newScale,
+      ty: midVB.y - pinch.contentMid.y * newScale,
+      scale: newScale,
+    });
+  };
+
+  const releaseTouchPointer = (pointerId: number) => {
+    pointersRef.current.delete(pointerId);
+    if (pointersRef.current.size < 2) pinchRef.current = null;
+  };
+
   const onNodePointerDown = (
     e: React.PointerEvent<HTMLElement>,
     id: string,
@@ -524,6 +627,12 @@ export function FriendGraph<T extends string = string>({
     // Stop bubbling so the SVG's pointerdown doesn't start a pan at the
     // same time the user starts dragging a node.
     e.stopPropagation();
+    // Track touch pointers so a second finger anywhere triggers pinch.
+    if (e.pointerType === "touch") {
+      const enteredPinch = trackTouchPointer(e.pointerId, e.clientX, e.clientY);
+      svgRef.current?.setPointerCapture(e.pointerId);
+      if (enteredPinch) return;
+    }
     // Before engagement on touch: don't capture — let the browser interpret
     // the gesture as a vertical scroll (via touch-action: pan-y). The link
     // tap still works because pointerup fires normally.
@@ -544,6 +653,16 @@ export function FriendGraph<T extends string = string>({
   };
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    // Track pointers before any early-return so pinch detection works even
+    // when the first finger landed on a node (node handler called stop-
+    // Propagation, so only the second finger's event reaches us here).
+    if (e.pointerType === "touch") {
+      const enteredPinch = trackTouchPointer(e.pointerId, e.clientX, e.clientY);
+      if (enteredPinch) {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
+    }
     const target = e.target as Element;
     if (target.closest("[data-node-id]")) return; // handled by node handler
     if (target.closest("a, button, input")) return;
@@ -563,6 +682,15 @@ export function FriendGraph<T extends string = string>({
   };
 
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    // Keep the tracked pointer position current for pinch math.
+    if (e.pointerType === "touch" && pointersRef.current.has(e.pointerId)) {
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    if (pinchRef.current) {
+      updatePinch();
+      return;
+    }
+
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
 
@@ -598,13 +726,17 @@ export function FriendGraph<T extends string = string>({
   };
 
   const endDrag = (e: React.PointerEvent<SVGSVGElement>) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== e.pointerId) return;
-    if (drag.kind === "node" && drag.moved) {
-      suppressClickRef.current.add(drag.id);
+    if (e.pointerType === "touch") {
+      releaseTouchPointer(e.pointerId);
     }
-    dragRef.current = null;
-    setPanning(false);
+    const drag = dragRef.current;
+    if (drag && drag.pointerId === e.pointerId) {
+      if (drag.kind === "node" && drag.moved) {
+        suppressClickRef.current.add(drag.id);
+      }
+      dragRef.current = null;
+      setPanning(false);
+    }
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
@@ -771,8 +903,11 @@ export function FriendGraph<T extends string = string>({
           </g>
 
           {/* Water ripples pulsing outward from the root — three concentric
-              rings on staggered loops evoke a dropped stone on still water. */}
+              rings on staggered loops evoke a dropped stone on still water.
+              Skip on narrow viewports: animating the SVG `r` attribute forces
+              layout each frame on many mobile browsers and chews battery. */}
           {!reduceMotion &&
+            !isNarrow &&
             (() => {
               const rootN = nodes.find(
                 (n): n is RootGraphNode => n.kind === "root",
