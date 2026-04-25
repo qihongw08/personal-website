@@ -40,9 +40,7 @@ export function GuohuaBackground() {
   return (
     <div
       aria-hidden
-      className={`pointer-events-none inset-0 z-0 overflow-hidden ${
-        isMobile ? "absolute" : "fixed"
-      }`}
+      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
     >
       {!isMobile && (
         <svg
