@@ -399,7 +399,9 @@ export function FriendGraph<T extends string = string>({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(max-width: 640px)");
+    const mq = window.matchMedia(
+      "(max-width: 768px), (hover: none) and (pointer: coarse)",
+    );
     const update = () => setIsNarrow(mq.matches);
     update();
     mq.addEventListener("change", update);
@@ -866,8 +868,10 @@ export function FriendGraph<T extends string = string>({
 
         <g transform={`translate(${view.tx} ${view.ty}) scale(${view.scale})`}>
           {/* Tag blob shapes — rendered inside a blur filter so the hull
-              edges bleed like ink on rice paper. */}
-          <g filter="url(#ink-wash-blob)">
+              edges bleed like ink on rice paper. Skip filter on mobile:
+              SVG feGaussianBlur with stdDeviation=14 is a massive per-frame
+              cost on phone GPUs. */}
+          <g filter={isNarrow ? undefined : "url(#ink-wash-blob)"}>
             {tagBlobs.map((blob) => {
               if (blob.points.length === 2) {
                 const [p1, p2] = blob.points;
@@ -998,12 +1002,12 @@ export function FriendGraph<T extends string = string>({
                   strokeDasharray={pattern}
                   initial={{ strokeDashoffset: 0 }}
                   animate={
-                    reduceMotion
+                    reduceMotion || isNarrow
                       ? { strokeDashoffset: 0 }
                       : { strokeDashoffset: -cycle }
                   }
                   transition={
-                    reduceMotion
+                    reduceMotion || isNarrow
                       ? { duration: 0 }
                       : { duration: 1.2, repeat: Infinity, ease: "linear" }
                   }

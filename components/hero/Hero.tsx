@@ -6,10 +6,19 @@ import { Terminal } from "./Terminal";
 
 export function Hero() {
   const [loaded, setLoaded] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setLoaded(true), 100);
     return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px), (hover: none) and (pointer: coarse)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
   }, []);
 
   const scrollDown = () => {
@@ -31,8 +40,8 @@ export function Hero() {
           top: "15%",
           left: "10%",
           background: "radial-gradient(circle, rgba(8,145,178,0.08), transparent 70%)",
-          filter: "blur(60px)",
-          animation: "floatOrb 8s ease-in-out infinite",
+          filter: isMobile ? "blur(20px)" : "blur(60px)",
+          animation: isMobile ? "none" : "floatOrb 8s ease-in-out infinite",
         }}
       />
       <div
@@ -42,8 +51,8 @@ export function Hero() {
           bottom: "20%",
           right: "10%",
           background: "radial-gradient(circle, rgba(124,58,237,0.06), transparent 70%)",
-          filter: "blur(80px)",
-          animation: "floatOrb 10s ease-in-out infinite reverse",
+          filter: isMobile ? "blur(24px)" : "blur(80px)",
+          animation: isMobile ? "none" : "floatOrb 10s ease-in-out infinite reverse",
         }}
       />
 

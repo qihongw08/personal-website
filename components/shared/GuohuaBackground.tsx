@@ -1,4 +1,7 @@
+"use client";
+
 import Image from "next/image";
+import { useEffect, useState } from "react";
 
 /**
  * Guóhuà (国画) ink-wash background.
@@ -11,67 +14,79 @@ import Image from "next/image";
  * to the image: fractal noise drives per-pixel displacement so the mountain
  * silhouettes waver like they're reflected on a slow pond. The turbulence
  * `baseFrequency` gently animates over 40s so the surface "breathes" without
- * ever feeling like an obvious loop. A light 1px gaussian blur + saturate
- * keeps details soft, and the cream + vignette overlays lift body text off
- * the art.
+ * ever feeling like an obvious loop.
+ *
+ * On mobile / touch devices the filter is dropped entirely — per-pixel
+ * displacement on a full-viewport image every frame is a scroll killer,
+ * and `position: fixed` additionally jitters during iOS URL-bar transitions.
+ * Mobile gets a plain blurred image anchored to the scroll container.
  *
  * Source: https://en.wikipedia.org/wiki/Dwelling_in_the_Fuchun_Mountains
  * License: Public domain (creator died 1354).
  */
 export function GuohuaBackground() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia(
+      "(max-width: 768px), (hover: none) and (pointer: coarse)",
+    );
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
   return (
     <div
       aria-hidden
-      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+      className={`pointer-events-none inset-0 z-0 overflow-hidden ${
+        isMobile ? "absolute" : "fixed"
+      }`}
     >
-      {/* Inline SVG filter referenced by `filter: url(#guohua-water)` below.
-          Kept off-screen + sized zero so it contributes no layout. */}
-      <svg
-        aria-hidden
-        focusable="false"
-        width="0"
-        height="0"
-        className="absolute"
-        style={{ position: "absolute", width: 0, height: 0 }}
-      >
-        <defs>
-          <filter
-            id="guohua-water"
-            x="-10%"
-            y="-10%"
-            width="120%"
-            height="120%"
-            colorInterpolationFilters="sRGB"
-          >
-            {/* Low-frequency fractal noise → broad, wavy bands rather
-                than fine-grained grain. Two octaves gives a layered feel. */}
-            <feTurbulence
-              type="fractalNoise"
-              baseFrequency="0.011 0.008"
-              numOctaves="2"
-              seed="7"
-              result="noise"
+      {!isMobile && (
+        <svg
+          aria-hidden
+          focusable="false"
+          width="0"
+          height="0"
+          className="absolute"
+          style={{ position: "absolute", width: 0, height: 0 }}
+        >
+          <defs>
+            <filter
+              id="guohua-water"
+              x="-10%"
+              y="-10%"
+              width="120%"
+              height="120%"
+              colorInterpolationFilters="sRGB"
             >
-              <animate
-                attributeName="baseFrequency"
-                dur="40s"
-                values="0.011 0.008;0.014 0.011;0.011 0.008"
-                repeatCount="indefinite"
+              <feTurbulence
+                type="fractalNoise"
+                baseFrequency="0.011 0.008"
+                numOctaves="2"
+                seed="7"
+                result="noise"
+              >
+                <animate
+                  attributeName="baseFrequency"
+                  dur="40s"
+                  values="0.011 0.008;0.014 0.011;0.011 0.008"
+                  repeatCount="indefinite"
+                />
+              </feTurbulence>
+              <feDisplacementMap
+                in="SourceGraphic"
+                in2="noise"
+                scale="22"
+                xChannelSelector="R"
+                yChannelSelector="G"
               />
-            </feTurbulence>
-            {/* Displace the image along the noise field — this is what
-                gives the ink-on-wet-paper warping. Scale is the maximum
-                pixel offset in either direction. */}
-            <feDisplacementMap
-              in="SourceGraphic"
-              in2="noise"
-              scale="22"
-              xChannelSelector="R"
-              yChannelSelector="G"
-            />
-          </filter>
-        </defs>
-      </svg>
+            </filter>
+          </defs>
+        </svg>
+      )}
 
       <Image
         src="/backgrounds/background.jpg"
@@ -82,8 +97,10 @@ export function GuohuaBackground() {
         className="object-cover"
         style={{
           opacity: 0.55,
-          filter: "url(#guohua-water) blur(1px) saturate(1.05)",
-          willChange: "filter",
+          filter: isMobile
+            ? "blur(2px) saturate(1.05)"
+            : "url(#guohua-water) blur(1px) saturate(1.05)",
+          willChange: isMobile ? undefined : "filter",
         }}
       />
       {/* Cream wash — lifts overall luminance so body text reads */}

@@ -13,15 +13,15 @@ export function ProjectCard({ project, stats, linkUrl }: ProjectCardProps) {
   const statusColor = STATUS_COLORS[project.status];
 
   return (
-    <div className="glass-card flex flex-col rounded-xl p-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="m-0 font-display text-xl font-bold text-[var(--ink)]">
+    <div className="glass-card flex flex-col rounded-xl p-5 md:p-6">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="m-0 truncate font-display text-xl font-bold text-[var(--ink)]">
             {project.name}
           </h3>
           <div className="mt-1.5 flex items-center gap-1.5">
             <div
-              className="h-1.5 w-1.5 rounded-full"
+              className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
               style={{ background: statusColor }}
             />
             <span
@@ -32,7 +32,7 @@ export function ProjectCard({ project, stats, linkUrl }: ProjectCardProps) {
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-shrink-0 items-center gap-1.5">
           {project.liveUrl && (
             <a
               href={project.liveUrl}

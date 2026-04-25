@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   motion,
   useReducedMotion,
@@ -12,6 +12,20 @@ import { SectionHeader } from "@/components/shared/SectionHeader";
 
 export function Career() {
   const reduceMotion = useReducedMotion();
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(
+      "(max-width: 768px), (hover: none) and (pointer: coarse)",
+    );
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  // Any path that previously respected reduced-motion should also drop heavy
+  // effects on mobile (backdrop blur + 3D transforms + infinite loops tank
+  // phone GPUs, regardless of the user's prefers-reduced-motion setting).
+  const lite = reduceMotion || isMobile;
   const timelineRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({
     target: timelineRef,
@@ -49,7 +63,7 @@ export function Career() {
           style={{
             background:
               "linear-gradient(to bottom, var(--brand), rgba(124,58,237,0.35), transparent)",
-            scaleY: reduceMotion ? 1 : lineScale,
+            scaleY: lite ? 1 : lineScale,
           }}
         />
 
@@ -67,15 +81,15 @@ export function Career() {
               style={{ perspective: 1200 }}
             >
               <div
-                className={`flex flex-1 justify-start ${
+                className={`flex w-full justify-start lg:w-auto lg:flex-1 ${
                   isLeft
                     ? "lg:justify-end lg:pr-9"
                     : "lg:justify-start lg:pl-9"
                 }`}
               >
-                <div className="relative max-w-[460px]">
+                <div className="relative w-full max-w-[460px]">
                   {/* Water droplet — impact glow plus concentric ripples on reveal */}
-                  {!reduceMotion && (
+                  {!lite && (
                     <div
                       aria-hidden
                       className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center"
@@ -129,20 +143,12 @@ export function Career() {
                     style={{
                       transformOrigin: isLeft ? "right center" : "left center",
                     }}
-                    initial={
-                      reduceMotion
-                        ? { opacity: 0 }
-                        : { opacity: 0, scale: 0.7, rotateX: 12, y: 40 }
-                    }
-                    whileInView={
-                      reduceMotion
-                        ? { opacity: 1 }
-                        : { opacity: 1, scale: 1, rotateX: 0, y: 0 }
-                    }
-                    whileHover={reduceMotion ? undefined : { y: -3 }}
+                    initial={{ opacity: 0 }}
+                    whileInView={{ opacity: 1 }}
+                    whileHover={lite ? undefined : { y: -3 }}
                     viewport={revealViewport}
                     transition={{
-                      duration: reduceMotion ? 0.3 : 0.9,
+                      duration: lite ? 0.3 : 0.9,
                       ease: [0.16, 1, 0.3, 1],
                     }}
                   >
@@ -207,7 +213,7 @@ export function Career() {
                 className="absolute left-[14px] top-1/2 z-[3] -translate-x-1/2 -translate-y-1/2 lg:left-1/2"
               >
                 {/* Pulsing ring — signals Active roles are still in progress */}
-                {exp.status === "Active" && !reduceMotion && (
+                {exp.status === "Active" && !lite && (
                   <motion.span
                     className="absolute left-1/2 top-1/2 h-[11px] w-[11px] -translate-x-1/2 -translate-y-1/2 rounded-full"
                     style={{ background: "#1cb389" }}
@@ -232,39 +238,29 @@ export function Career() {
                         : "none",
                     border: "2px solid var(--surface)",
                   }}
-                  initial={
-                    reduceMotion ? { opacity: 0 } : { scale: 0, opacity: 0 }
-                  }
-                  whileInView={
-                    reduceMotion ? { opacity: 1 } : { scale: 1, opacity: 1 }
-                  }
+                  initial={{ opacity: 0 }}
+                  whileInView={{ opacity: 1 }}
                   viewport={revealViewport}
                   transition={{
-                    duration: reduceMotion ? 0.3 : 0.6,
-                    delay: reduceMotion ? 0 : 0.3,
+                    duration: lite ? 0.3 : 0.6,
+                    delay: lite ? 0 : 0.3,
                     ease: "easeOut",
                   }}
                 />
               </div>
 
               <motion.div
-                className={`z-[2] mb-2 flex flex-1 flex-col justify-center text-left lg:mb-0 ${
+                className={`z-[2] mb-2 flex w-full flex-col justify-center text-left lg:mb-0 lg:w-auto lg:flex-1 ${
                   isLeft
                     ? "lg:pl-9 lg:text-left"
                     : "lg:pr-9 lg:text-right"
                 }`}
-                initial={
-                  reduceMotion
-                    ? { opacity: 0 }
-                    : { opacity: 0, x: isLeft ? 20 : -20 }
-                }
-                whileInView={
-                  reduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }
-                }
+                initial={{ opacity: 0 }}
+                whileInView={{ opacity: 1 }}
                 viewport={revealViewport}
                 transition={{
-                  duration: reduceMotion ? 0.3 : 0.7,
-                  delay: reduceMotion ? 0 : 0.2,
+                  duration: lite ? 0.3 : 0.7,
+                  delay: lite ? 0 : 0.2,
                   ease: [0.16, 1, 0.3, 1],
                 }}
               >
