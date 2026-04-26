@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/refresh-kugou",
+      "schedule": "0 6 * * *"
+    }
+  ]
+}

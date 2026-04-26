@@ -4,7 +4,7 @@ import { scanMedia } from "@/lib/media";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { FadeInWhenVisible } from "@/components/shared/FadeInWhenVisible";
 import { MediaViewer } from "./MediaViewer";
-import { SpotifyEmbed } from "./SpotifyEmbed";
+import { TopPlayed } from "./TopPlayed";
 import { LeagueCard } from "./LeagueCard";
 
 export async function Hobbies() {
@@ -140,8 +140,8 @@ export async function Hobbies() {
             )}
           </div>
 
-          {/* Spotify embed */}
-          <SpotifyEmbed />
+          {/* KuGou top played */}
+          <TopPlayed />
         </div>
       </FadeInWhenVisible>
     </section>
