@@ -10,6 +10,11 @@ export type TopSong = {
   playCount: number | null;
 };
 
+// User-curated DJ playlist (English-language songs). global_collection_id is
+// stable per playlist; if you rename or recreate the playlist in the KuGou app,
+// re-fetch /user/playlist and update this.
+export const DJ_PLAYLIST_ID = "collection_3_1264709290_18_0";
+
 type StoredAuth = {
   token: string;
   userid: string;
@@ -166,76 +171,128 @@ export async function refreshKugouAuth(): Promise<{
 }
 
 type RawSong = {
-  hash?: string;
-  Hash?: string;
-  filename?: string;
-  name?: string;
-  songname?: string;
-  singername?: string;
-  author_name?: string;
-  albumname?: string;
-  album_name?: string;
-  total_play_count?: number;
-  play_count?: number;
   pc?: number;
-  img?: string;
-  imgurl?: string;
-  sizable_cover?: string;
-  cover?: string;
-  album_img?: string;
+  info?: {
+    name?: string;
+    singername?: string;
+    hash?: string;
+    cover?: string;
+    albuminfo?: { name?: string };
+    trans_param?: { union_cover?: string };
+  };
 };
 
 type UserHistoryResponse = {
   status?: number;
-  data?: {
-    songs?: RawSong[];
-    info?: Array<unknown>;
-  };
+  data?: { songs?: RawSong[] };
 };
 
 function pickImage(s: RawSong): string | null {
-  const candidates = [s.sizable_cover, s.imgurl, s.img, s.cover, s.album_img].filter(
-    (x): x is string => typeof x === "string" && x.length > 0,
-  );
-  if (candidates.length === 0) return null;
-  // KuGou's image URLs often contain a "{size}" placeholder.
-  return candidates[0].replace(/\{size\}/g, "240").replace(/^http:/, "https:");
+  const raw = s.info?.cover ?? s.info?.trans_param?.union_cover;
+  if (!raw) return null;
+  // KuGou cover URLs contain a literal "{size}" placeholder for the edge length.
+  return raw.replace(/\{size\}/g, "240").replace(/^http:/, "https:");
 }
 
-function parseFilename(filename: string): { artist: string; title: string } {
-  const idx = filename.indexOf(" - ");
-  if (idx === -1) return { artist: "", title: filename };
-  return { artist: filename.slice(0, idx).trim(), title: filename.slice(idx + 3).trim() };
+type RawPlaylistTrack = {
+  hash?: string;
+  name?: string;
+  singername?: string | null;
+  cover?: string;
+  sort?: number;
+  collecttime?: number;
+  singerinfo?: Array<{ name?: string }>;
+  albuminfo?: { name?: string };
+};
+
+type PlaylistTracksResponse = {
+  status?: number;
+  data?: { songs?: RawPlaylistTrack[] };
+};
+
+function parseTitleFromName(name: string): { artist: string; title: string } {
+  const idx = name.indexOf(" - ");
+  if (idx === -1) return { artist: "", title: name };
+  return { artist: name.slice(0, idx).trim(), title: name.slice(idx + 3).trim() };
+}
+
+function pickPlaylistImage(s: RawPlaylistTrack): string | null {
+  if (!s.cover) return null;
+  return s.cover.replace(/\{size\}/g, "240").replace(/^http:/, "https:");
 }
 
 /**
- * Fetches Qihong's top-played songs from KuGou via /user/history. Fail-open:
- * returns [] when env is unset, blob is missing, or the API errors out.
+ * Fetches the first `limit` tracks of a playlist by global_collection_id, in
+ * the playlist's natural sort order. Used for the EN tab (DJ playlist).
+ */
+export async function getPlaylistTracks(
+  globalCollectionId: string,
+  limit = 5,
+): Promise<TopSong[]> {
+  const auth = await readStoredAuth();
+  if (!auth) return [];
+  try {
+    const out = await callApi(
+      "/playlist/track/all",
+      auth,
+      { id: globalCollectionId, pagesize: String(Math.max(limit, 30)) },
+      { next: { revalidate: 604800 } },
+    );
+    if (!out || !out.res.ok) return [];
+    const json = (await out.res.json()) as PlaylistTracksResponse;
+    if (json.status !== 1) return [];
+    const songs = json.data?.songs ?? [];
+    return [...songs]
+      .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
+      .slice(0, limit)
+      .map((s): TopSong => {
+        const fromName = parseTitleFromName(s.name ?? "");
+        const artistsFromInfo = (s.singerinfo ?? [])
+          .map((x) => x.name)
+          .filter((x): x is string => !!x)
+          .join(", ");
+        return {
+          hash: s.hash ?? "",
+          title: fromName.title,
+          artist: artistsFromInfo || s.singername || fromName.artist,
+          album: s.albuminfo?.name ?? "",
+          imageUrl: pickPlaylistImage(s),
+          playCount: null,
+        };
+      });
+  } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("[kugou] getPlaylistTracks failed:", err);
+    }
+    return [];
+  }
+}
+
+/**
+ * Fetches top-played songs from KuGou via /user/history. The endpoint returns
+ * recent listens unsorted; we sort by `pc` (play count) desc to surface the
+ * actual top-played. Fail-open: returns [] on missing env/auth or API error.
  */
 export async function getTopPlayed(limit = 6): Promise<TopSong[]> {
   const auth = await readStoredAuth();
   if (!auth) return [];
   try {
-    const out = await callApi("/user/history", auth, {}, { next: { revalidate: 3600 } });
+    const out = await callApi("/user/history", auth, {}, { next: { revalidate: 604800 } });
     if (!out || !out.res.ok) return [];
     const json = (await out.res.json()) as UserHistoryResponse;
     if (json.status !== 1) return [];
     const songs = json.data?.songs ?? [];
-    return songs.slice(0, limit).map((s): TopSong => {
-      const filename = s.filename ?? "";
-      const fromFilename = parseFilename(filename);
-      const title = s.songname ?? s.name ?? fromFilename.title ?? "";
-      const artist = s.singername ?? s.author_name ?? fromFilename.artist ?? "";
-      const album = s.albumname ?? s.album_name ?? "";
-      return {
-        hash: s.hash ?? s.Hash ?? "",
-        title,
-        artist,
-        album,
+    return [...songs]
+      .sort((a, b) => (b.pc ?? 0) - (a.pc ?? 0))
+      .slice(0, limit)
+      .map((s): TopSong => ({
+        hash: s.info?.hash ?? "",
+        title: s.info?.name ?? "",
+        artist: s.info?.singername ?? "",
+        album: s.info?.albuminfo?.name ?? "",
         imageUrl: pickImage(s),
-        playCount: s.total_play_count ?? s.play_count ?? s.pc ?? null,
-      };
-    });
+        playCount: s.pc ?? null,
+      }));
   } catch (err) {
     if (process.env.NODE_ENV === "development") {
       console.error("[kugou] getTopPlayed failed:", err);

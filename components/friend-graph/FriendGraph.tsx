@@ -132,8 +132,10 @@ function FriendTile<T extends string>({
     // mobile and pushed them off-screen. The RootTile has no transform,
     // which is why it scales correctly. Hover only fires on pointer:fine
     // devices, so touch users never hit this path.
-    transition: "box-shadow 0.2s ease",
-    ...(hovered ? { transform: "translateY(-3px)", transitionProperty: "transform, box-shadow" } : null),
+    transition: hovered
+      ? "transform 0.2s ease, box-shadow 0.2s ease"
+      : "box-shadow 0.2s ease",
+    ...(hovered ? { transform: "translateY(-3px)" } : null),
     // Until engaged, let touch gestures pan the page vertically; once engaged
     // the tile fully owns pointer gestures for drag-to-move.
     touchAction: engaged ? "none" : "pan-y",
