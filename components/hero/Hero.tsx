@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { Terminal } from "./Terminal";
 
 export function Hero() {
   const [loaded, setLoaded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [orbsActive, setOrbsActive] = useState(true);
+  const sectionRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setLoaded(true), 100);
@@ -21,15 +23,31 @@ export function Hero() {
     return () => mq.removeEventListener("change", update);
   }, []);
 
+  // Pause the floating-orb keyframe animations whenever the hero is offscreen.
+  // `filter: blur(40-50px)` on an animated element keeps a backing buffer hot
+  // even when the section is no longer visible, so this saves continuous GPU
+  // work after the user scrolls past.
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => setOrbsActive(entry.isIntersecting),
+      { threshold: 0 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   const scrollDown = () => {
     const el = document.getElementById("about");
     if (!el) return;
     const y = el.getBoundingClientRect().top + window.pageYOffset - 80;
-    window.scrollTo({ top: y, behavior: "smooth" });
+    window.scrollTo({ top: y });
   };
 
   return (
     <section
+      ref={sectionRef}
       id="home"
       className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-5 sm:px-6 md:px-10"
     >
@@ -40,8 +58,12 @@ export function Hero() {
           top: "15%",
           left: "10%",
           background: "radial-gradient(circle, rgba(8,145,178,0.08), transparent 70%)",
-          filter: isMobile ? "blur(20px)" : "blur(60px)",
-          animation: isMobile ? "none" : "floatOrb 8s ease-in-out infinite",
+          filter: isMobile ? "blur(20px)" : "blur(40px)",
+          animationName: isMobile ? "none" : "floatOrb",
+          animationDuration: "8s",
+          animationTimingFunction: "ease-in-out",
+          animationIterationCount: "infinite",
+          animationPlayState: orbsActive ? "running" : "paused",
         }}
       />
       <div
@@ -51,8 +73,13 @@ export function Hero() {
           bottom: "20%",
           right: "10%",
           background: "radial-gradient(circle, rgba(124,58,237,0.06), transparent 70%)",
-          filter: isMobile ? "blur(24px)" : "blur(80px)",
-          animation: isMobile ? "none" : "floatOrb 10s ease-in-out infinite reverse",
+          filter: isMobile ? "blur(24px)" : "blur(50px)",
+          animationName: isMobile ? "none" : "floatOrb",
+          animationDuration: "10s",
+          animationTimingFunction: "ease-in-out",
+          animationIterationCount: "infinite",
+          animationDirection: "reverse",
+          animationPlayState: orbsActive ? "running" : "paused",
         }}
       />
 

@@ -12,9 +12,9 @@ import { useEffect, useState } from "react";
  *
  * The water feel comes from an SVG turbulence + displacement filter applied
  * to the image: fractal noise drives per-pixel displacement so the mountain
- * silhouettes waver like they're reflected on a slow pond. The turbulence
- * `baseFrequency` gently animates over 40s so the surface "breathes" without
- * ever feeling like an obvious loop.
+ * silhouettes waver like they're reflected on a slow pond. The filter is
+ * static — animating `baseFrequency` regenerates noise every frame and
+ * pegs the GPU.
  *
  * On mobile / touch devices the filter is dropped entirely — per-pixel
  * displacement on a full-viewport image every frame is a scroll killer,
@@ -66,14 +66,7 @@ export function GuohuaBackground() {
                 numOctaves="2"
                 seed="7"
                 result="noise"
-              >
-                <animate
-                  attributeName="baseFrequency"
-                  dur="40s"
-                  values="0.011 0.008;0.014 0.011;0.011 0.008"
-                  repeatCount="indefinite"
-                />
-              </feTurbulence>
+              />
               <feDisplacementMap
                 in="SourceGraphic"
                 in2="noise"
@@ -98,7 +91,6 @@ export function GuohuaBackground() {
           filter: isMobile
             ? "blur(2px) saturate(1.05)"
             : "url(#guohua-water) blur(1px) saturate(1.05)",
-          willChange: isMobile ? undefined : "filter",
         }}
       />
       {/* Cream wash — lifts overall luminance so body text reads */}

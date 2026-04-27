@@ -22,21 +22,40 @@ export function Navigation() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => {
-      setScrolled(window.scrollY > 50);
-
-      for (let i = NAV_SECTIONS.length - 1; i >= 0; i--) {
-        const id = NAV_SECTIONS[i].toLowerCase();
-        const el = document.getElementById(id);
-        if (el && el.getBoundingClientRect().top < 200) {
-          setActive(NAV_SECTIONS[i]);
-          break;
-        }
-      }
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
+    const onScroll = () => setScrolled(window.scrollY > 50);
     onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    const sections = NAV_SECTIONS.map((s) => ({
+      name: s,
+      el: document.getElementById(s.toLowerCase()),
+    })).filter(
+      (e): e is { name: Section; el: HTMLElement } => e.el !== null,
+    );
+    if (sections.length === 0) return;
+
+    const intersecting = new Set<HTMLElement>();
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting)
+            intersecting.add(entry.target as HTMLElement);
+          else intersecting.delete(entry.target as HTMLElement);
+        }
+        for (let i = sections.length - 1; i >= 0; i--) {
+          if (intersecting.has(sections[i].el)) {
+            setActive(sections[i].name);
+            return;
+          }
+        }
+      },
+      { rootMargin: "0px 0px -85% 0px", threshold: 0 },
+    );
+    sections.forEach(({ el }) => io.observe(el));
+    return () => io.disconnect();
   }, []);
 
   // Lock body scroll while drawer is open so the page doesn't shift behind it.
@@ -53,15 +72,14 @@ export function Navigation() {
     const el = document.getElementById(id.toLowerCase());
     if (!el) return;
     const y = el.getBoundingClientRect().top + window.pageYOffset - 80;
-    window.scrollTo({ top: y, behavior: "smooth" });
+    window.scrollTo({ top: y });
     setOpen(false);
   };
 
   const surfaceStyle = {
     background: scrolled || open ? "rgba(248,247,244,0.62)" : "transparent",
-    backdropFilter: scrolled || open ? "blur(24px) saturate(1.4)" : "none",
-    WebkitBackdropFilter:
-      scrolled || open ? "blur(24px) saturate(1.4)" : "none",
+    backdropFilter: scrolled || open ? "blur(12px)" : "none",
+    WebkitBackdropFilter: scrolled || open ? "blur(12px)" : "none",
     borderBottom:
       scrolled || open
         ? "1px solid var(--glass-border)"

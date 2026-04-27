@@ -21,7 +21,7 @@ export default function Home() {
       <Friends />
       <footer className="border-t border-[var(--glass-border)] px-5 py-10 text-center sm:px-6 md:px-10 md:py-[60px]">
         <div className="text-[13px] text-[var(--ink-faint)]">
-          Built by {profile.name.en} & Claude 4.6 · {new Date().getFullYear()}
+          Built by {profile.name.en} & Claude Opus 4.6
         </div>
       </footer>
     </>

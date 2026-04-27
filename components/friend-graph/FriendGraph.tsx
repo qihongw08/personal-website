@@ -23,7 +23,8 @@ const ROOT_RADIUS = 18;
 // Prevent scale from collapsing to 0 / flipping / creating NaN; no practical
 // upper bound — zoom as far in as you want.
 const MIN_SCALE = 0.05;
-const DRAG_THRESHOLD = 3; // px of screen movement before a pointerdown becomes a drag
+const DRAG_THRESHOLD = 4; // px of screen movement before a mouse pointerdown becomes a drag
+const TOUCH_DRAG_THRESHOLD = 10; // fingers wobble more on a tap — wider dead-zone keeps taps from registering as drags
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -93,10 +94,71 @@ function Avatar({
   );
 }
 
+function GripHandle({
+  id,
+  onNodePointerDown,
+}: {
+  id: string;
+  onNodePointerDown: (e: React.PointerEvent<HTMLElement>, id: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label="Drag to reposition"
+      onPointerDown={(e) => onNodePointerDown(e, id)}
+      onClick={(e) => e.preventDefault()}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.opacity = "1";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.opacity = "0.4";
+      }}
+      style={{
+        margin: 0,
+        padding: 0,
+        border: 0,
+        background: "transparent",
+        outline: 0,
+        font: "inherit",
+        position: "absolute",
+        top: 6,
+        right: 6,
+        width: 26,
+        height: 26,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 8,
+        cursor: "grab",
+        color: "var(--ink-faint, rgba(26,26,46,0.5))",
+        opacity: 0.4,
+        transition: "opacity 0.15s ease",
+        touchAction: "none",
+      }}
+    >
+      <svg
+        width="14"
+        height="20"
+        viewBox="0 0 14 20"
+        fill="currentColor"
+        aria-hidden
+      >
+        <circle cx="4" cy="4" r="1.5" />
+        <circle cx="10" cy="4" r="1.5" />
+        <circle cx="4" cy="10" r="1.5" />
+        <circle cx="10" cy="10" r="1.5" />
+        <circle cx="4" cy="16" r="1.5" />
+        <circle cx="10" cy="16" r="1.5" />
+      </svg>
+    </button>
+  );
+}
+
 function FriendTile<T extends string>({
   node,
   hovered,
   engaged,
+  isNarrow,
   onHover,
   onNodePointerDown,
   onSuppressClick,
@@ -104,6 +166,7 @@ function FriendTile<T extends string>({
   node: FriendGraphNode<T>;
   hovered: boolean;
   engaged: boolean;
+  isNarrow: boolean;
   onHover: (id: string | null) => void;
   onNodePointerDown: (e: React.PointerEvent<HTMLElement>, id: string) => void;
   onSuppressClick: (id: string) => boolean;
@@ -111,39 +174,61 @@ function FriendTile<T extends string>({
   const { friend, position, width, height, color } = node;
   const accent = color;
 
-  const tileStyle: React.CSSProperties = {
+  // Outer chrome: width, glass surface, hover lift. Layout for the inner
+  // link/grip layer is handled by `innerContentStyle`.
+  const outerTileStyle: React.CSSProperties = {
     all: "unset",
     boxSizing: "border-box",
     width,
     minHeight: height,
     display: "flex",
     flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "flex-start",
-    padding: 12,
-    gap: 8,
+    // `position: relative` is needed to anchor the grip handle. It also trips
+    // a WebKit/iOS bug on foreignObject children where the tile stops
+    // inheriting the SVG's scale and renders at raw CSS pixels — so only
+    // apply it on desktop, which is the only place a grip is rendered.
+    ...(isNarrow ? null : { position: "relative" as const }),
     borderRadius: TILE_RADIUS,
-    cursor: engaged ? "grab" : "pointer",
-    // Only set `transform` when actually hovered. Applying a CSS transform
-    // (even an identity `translateY(0)`) to an element inside a
-    // `<foreignObject>` trips a WebKit/iOS bug where the element stops
-    // inheriting the parent SVG's scale and renders at its raw CSS pixel
-    // size — which blew friend tiles up to ~3× their intended size on
-    // mobile and pushed them off-screen. The RootTile has no transform,
-    // which is why it scales correctly. Hover only fires on pointer:fine
-    // devices, so touch users never hit this path.
+    // Hover lift: only applies on pointer:fine devices because :hover
+    // doesn't latch on touch. The `<foreignObject>` + transform interaction
+    // would break mobile scaling, but we never enter this branch on mobile.
     transition: hovered
       ? "transform 0.2s ease, box-shadow 0.2s ease"
       : "box-shadow 0.2s ease",
     ...(hovered ? { transform: "translateY(-3px)" } : null),
-    // Until engaged, let touch gestures pan the page vertically; once engaged
-    // the tile fully owns pointer gestures for drag-to-move.
+    // Pre-engagement: let touch pan the page vertically. Post-engagement:
+    // claim gestures (so pinch-zoom can fire on the graph). Single-finger
+    // taps still navigate the link in either state.
     touchAction: engaged ? "none" : "pan-y",
     ...glassStyle,
     boxShadow: hovered
       ? `0 10px 28px ${accent}33, inset 0 1px 0 rgba(255,255,255,0.55)`
       : glassStyle.boxShadow,
     borderColor: hovered ? `${accent}66` : (glassStyle.border as string),
+    cursor: friend.link ? "pointer" : undefined,
+  };
+
+  // Inner clickable surface: fills the outer tile and holds the avatar /
+  // name / headline content. On desktop the grip is a sibling positioned
+  // on top, so anywhere outside the grip is part of the link.
+  const innerContentStyle: React.CSSProperties = {
+    margin: 0,
+    border: 0,
+    background: "transparent",
+    outline: 0,
+    font: "inherit",
+    color: "inherit",
+    textDecoration: "none",
+    boxSizing: "border-box",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    padding: 12,
+    gap: 8,
+    flex: 1,
+    width: "100%",
+    cursor: friend.link ? "pointer" : "default",
   };
 
   const hoverHandlers = {
@@ -155,10 +240,49 @@ function FriendTile<T extends string>({
 
   const ariaLabel = `${friend.name}${friend.headline ? ` — ${friend.headline}` : ""}`;
 
-  const nameText = (
-    <span style={{ color: "inherit", textDecoration: "none" }}>
-      {friend.name}
-    </span>
+  const innerChildren = (
+    <>
+      <Avatar
+        name={friend.name}
+        photo={friend.photo}
+        size={52}
+        accent={accent}
+      />
+      <div
+        style={{
+          fontFamily: "var(--font-display, var(--font-sans), ui-sans-serif)",
+          fontSize: 12,
+          fontWeight: 600,
+          color: "var(--ink, #1a1a2e)",
+          textAlign: "center",
+          lineHeight: 1.25,
+          width: "100%",
+          wordBreak: "break-word",
+        }}
+      >
+        {friend.name}
+      </div>
+      {friend.headline
+        ? splitHeadline(friend.headline).map((segment, i) => (
+            <div
+              key={i}
+              style={{
+                fontFamily: "var(--font-mono, ui-monospace), monospace",
+                fontSize: 9,
+                letterSpacing: "0.8px",
+                color: "var(--ink-faint, rgba(26,26,46,0.52))",
+                textTransform: "uppercase",
+                textAlign: "center",
+                lineHeight: 1.3,
+                width: "100%",
+                wordBreak: "break-word",
+              }}
+            >
+              {segment}
+            </div>
+          ))
+        : null}
+    </>
   );
 
   return (
@@ -169,73 +293,29 @@ function FriendTile<T extends string>({
       height={height + 8}
       style={{ overflow: "visible" }}
     >
-      <div
-        role="group"
-        data-node-id={friend.id}
-        aria-label={ariaLabel}
-        onPointerDown={(e) => onNodePointerDown(e, friend.id)}
-        style={tileStyle}
-        {...hoverHandlers}
-      >
-        <Avatar
-          name={friend.name}
-          photo={friend.photo}
-          size={52}
-          accent={accent}
-        />
-        <div
-          style={{
-            fontFamily: "var(--font-display, var(--font-sans), ui-sans-serif)",
-            fontSize: 12,
-            fontWeight: 600,
-            color: "var(--ink, #1a1a2e)",
-            textAlign: "center",
-            lineHeight: 1.25,
-            width: "100%",
-            wordBreak: "break-word",
-          }}
-        >
-          {friend.link ? (
-            <a
-              href={friend.link}
-              target="_blank"
-              rel="noopener noreferrer"
-              draggable={false}
-              onClick={(e) => {
-                if (onSuppressClick(friend.id)) e.preventDefault();
-              }}
-              style={{
-                color: "inherit",
-                textDecoration: "none",
-                cursor: "pointer",
-              }}
-            >
-              {nameText}
-            </a>
-          ) : (
-            nameText
-          )}
-        </div>
-        {friend.headline
-          ? splitHeadline(friend.headline).map((segment, i) => (
-              <div
-                key={i}
-                style={{
-                  fontFamily: "var(--font-mono, ui-monospace), monospace",
-                  fontSize: 9,
-                  letterSpacing: "0.8px",
-                  color: "var(--ink-faint, rgba(26,26,46,0.52))",
-                  textTransform: "uppercase",
-                  textAlign: "center",
-                  lineHeight: 1.3,
-                  width: "100%",
-                  wordBreak: "break-word",
-                }}
-              >
-                {segment}
-              </div>
-            ))
-          : null}
+      <div data-node-id={friend.id} style={outerTileStyle} {...hoverHandlers}>
+        {friend.link ? (
+          <a
+            href={friend.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            draggable={false}
+            aria-label={ariaLabel}
+            onClick={(e) => {
+              if (onSuppressClick(friend.id)) e.preventDefault();
+            }}
+            style={innerContentStyle}
+          >
+            {innerChildren}
+          </a>
+        ) : (
+          <div role="group" aria-label={ariaLabel} style={innerContentStyle}>
+            {innerChildren}
+          </div>
+        )}
+        {!isNarrow ? (
+          <GripHandle id={friend.id} onNodePointerDown={onNodePointerDown} />
+        ) : null}
       </div>
     </foreignObject>
   );
@@ -245,34 +325,89 @@ function RootTile<T extends string>({
   node,
   accent,
   engaged,
+  isNarrow,
   onNodePointerDown,
   onSuppressClick,
 }: {
   node: RootGraphNode;
   accent: string;
   engaged: boolean;
+  isNarrow: boolean;
   onNodePointerDown: (e: React.PointerEvent<HTMLElement>, id: string) => void;
   onSuppressClick: (id: string) => boolean;
   _t?: T;
 }) {
   const { root, position, width, height, id } = node;
-  const rootStyle: React.CSSProperties = {
+
+  const outerRootStyle: React.CSSProperties = {
     all: "unset",
     boxSizing: "border-box",
     width,
     minHeight: height,
     display: "flex",
     flexDirection: "column",
+    // See FriendTile note on `position: relative` + foreignObject + iOS WebKit.
+    ...(isNarrow ? null : { position: "relative" as const }),
+    borderRadius: ROOT_RADIUS,
+    touchAction: engaged ? "none" : "pan-y",
+    ...glassStyle,
+    boxShadow: `0 0 0 2px ${accent}55, 0 10px 32px ${accent}2e, inset 0 1px 0 rgba(255,255,255,0.55)`,
+    cursor: root.link ? "pointer" : undefined,
+  };
+
+  const innerContentStyle: React.CSSProperties = {
+    margin: 0,
+    border: 0,
+    background: "transparent",
+    outline: 0,
+    font: "inherit",
+    color: "inherit",
+    textDecoration: "none",
+    boxSizing: "border-box",
+    display: "flex",
+    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
     padding: 14,
     gap: 10,
-    borderRadius: ROOT_RADIUS,
-    cursor: engaged ? "grab" : "pointer",
-    touchAction: engaged ? "none" : "pan-y",
-    ...glassStyle,
-    boxShadow: `0 0 0 2px ${accent}55, 0 10px 32px ${accent}2e, inset 0 1px 0 rgba(255,255,255,0.55)`,
+    flex: 1,
+    width: "100%",
+    cursor: root.link ? "pointer" : "default",
   };
+
+  const innerChildren = (
+    <>
+      <Avatar name={root.name} photo={root.photo} size={72} accent={accent} />
+      <div
+        style={{
+          fontFamily: "var(--font-display, var(--font-sans), ui-sans-serif)",
+          fontSize: 13,
+          fontWeight: 700,
+          color: "var(--ink, #1a1a2e)",
+          textAlign: "center",
+          lineHeight: 1.25,
+          wordBreak: "break-word",
+        }}
+      >
+        {root.name}
+      </div>
+      {root.headline ? (
+        <div
+          style={{
+            fontFamily: "var(--font-mono, ui-monospace), monospace",
+            fontSize: 9,
+            letterSpacing: "1.2px",
+            color: accent,
+            textTransform: "uppercase",
+            textAlign: "center",
+            wordBreak: "break-word",
+          }}
+        >
+          {root.headline}
+        </div>
+      ) : null}
+    </>
+  );
 
   return (
     <foreignObject
@@ -282,59 +417,28 @@ function RootTile<T extends string>({
       height={height + 8}
       style={{ overflow: "visible" }}
     >
-      <div
-        data-node-id={id}
-        onPointerDown={(e) => onNodePointerDown(e, id)}
-        style={rootStyle}
-        aria-label={root.name}
-      >
-        <Avatar name={root.name} photo={root.photo} size={72} accent={accent} />
-        <div
-          style={{
-            fontFamily: "var(--font-display, var(--font-sans), ui-sans-serif)",
-            fontSize: 13,
-            fontWeight: 700,
-            color: "var(--ink, #1a1a2e)",
-            textAlign: "center",
-            lineHeight: 1.25,
-            wordBreak: "break-word",
-          }}
-        >
-          {root.link ? (
-            <a
-              href={root.link}
-              target="_blank"
-              rel="noopener noreferrer"
-              draggable={false}
-              onClick={(e) => {
-                if (onSuppressClick(id)) e.preventDefault();
-              }}
-              style={{
-                color: "inherit",
-                textDecoration: "none",
-                cursor: "pointer",
-              }}
-            >
-              {root.name}
-            </a>
-          ) : (
-            root.name
-          )}
-        </div>
-        {root.headline ? (
-          <div
-            style={{
-              fontFamily: "var(--font-mono, ui-monospace), monospace",
-              fontSize: 9,
-              letterSpacing: "1.2px",
-              color: accent,
-              textTransform: "uppercase",
-              textAlign: "center",
-              wordBreak: "break-word",
+      <div data-node-id={id} style={outerRootStyle}>
+        {root.link ? (
+          <a
+            href={root.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            draggable={false}
+            aria-label={root.name}
+            onClick={(e) => {
+              if (onSuppressClick(id)) e.preventDefault();
             }}
+            style={innerContentStyle}
           >
-            {root.headline}
+            {innerChildren}
+          </a>
+        ) : (
+          <div aria-label={root.name} style={innerContentStyle}>
+            {innerChildren}
           </div>
+        )}
+        {!isNarrow ? (
+          <GripHandle id={id} onNodePointerDown={onNodePointerDown} />
         ) : null}
       </div>
     </foreignObject>
@@ -398,6 +502,10 @@ export function FriendGraph<T extends string = string>({
   // (water ripples) on mobile where compositing is already strained by the
   // foreignObject tiles + tag-blob blur filter.
   const [isNarrow, setIsNarrow] = useState(false);
+  // Visibility flag — pauses the infinite ripple + dashed-edge animations
+  // when the graph scrolls offscreen. Without this, framer-motion keeps the
+  // SVG layer hot even when the user has scrolled past the section.
+  const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -408,6 +516,17 @@ export function FriendGraph<T extends string = string>({
     update();
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => setIsVisible(entry.isIntersecting),
+      { threshold: 0 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
   }, []);
 
   const baseLayout = useMemo(
@@ -634,12 +753,13 @@ export function FriendGraph<T extends string = string>({
     // Track touch pointers so a second finger anywhere triggers pinch.
     if (e.pointerType === "touch") {
       const enteredPinch = trackTouchPointer(e.pointerId, e.clientX, e.clientY);
-      svgRef.current?.setPointerCapture(e.pointerId);
-      if (enteredPinch) return;
+      if (enteredPinch) {
+        svgRef.current?.setPointerCapture(e.pointerId);
+        return;
+      }
     }
-    // Before engagement on touch: don't capture — let the browser interpret
-    // the gesture as a vertical scroll (via touch-action: pan-y). The link
-    // tap still works because pointerup fires normally.
+    // Pre-engagement on touch: let the browser handle the gesture natively
+    // (touch-action: pan-y → vertical scroll, tap → click → link nav).
     if (!engaged && e.pointerType === "touch") return;
     dragRef.current = {
       kind: "node",
@@ -651,9 +771,10 @@ export function FriendGraph<T extends string = string>({
       nodeStartY: node.position.y,
       moved: false,
     };
-    // Capture on the SVG so subsequent move/up events land there even if
-    // the pointer leaves the tile.
-    svgRef.current?.setPointerCapture(e.pointerId);
+    // Capture is deferred to onPointerMove (once movement exceeds the drag
+    // threshold). Capturing on pointerdown causes the synthesized `click`
+    // to be retargeted to the SVG in some browsers, which breaks link
+    // navigation when the user clicks a name without dragging.
   };
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
@@ -698,11 +819,17 @@ export function FriendGraph<T extends string = string>({
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
 
+    const threshold =
+      e.pointerType === "touch" ? TOUCH_DRAG_THRESHOLD : DRAG_THRESHOLD;
     if (drag.kind === "node") {
       const dxScreen = e.clientX - drag.startClientX;
       const dyScreen = e.clientY - drag.startClientY;
-      if (!drag.moved && Math.hypot(dxScreen, dyScreen) > DRAG_THRESHOLD) {
+      if (!drag.moved && Math.hypot(dxScreen, dyScreen) > threshold) {
         drag.moved = true;
+        // Now that we've decided this is a drag, lock the pointer to the
+        // SVG so subsequent moves stay glued even if the cursor exits the
+        // tile bounds.
+        svgRef.current?.setPointerCapture(e.pointerId);
       }
       if (!drag.moved) return;
       const { x: dx, y: dy } = screenDeltaToViewBox(dxScreen, dyScreen);
@@ -720,7 +847,7 @@ export function FriendGraph<T extends string = string>({
       drag.lastClientY = e.clientY;
       if (
         !drag.moved &&
-        Math.abs(dxScreen) + Math.abs(dyScreen) > DRAG_THRESHOLD
+        Math.abs(dxScreen) + Math.abs(dyScreen) > threshold
       ) {
         drag.moved = true;
       }
@@ -758,9 +885,7 @@ export function FriendGraph<T extends string = string>({
   // of their live positions and render a soft colored region behind the
   // graph. Multi-tag friends sit in overlapping blobs by construction.
   const BLOB_OPACITY = 0.16;
-  const tagBlobs = (() => {
-    // Track both the node centers (for hull shape) and the tile top edges
-    // (for label placement so it never sits on top of a card).
+  const tagBlobs = useMemo(() => {
     const byTag = new Map<
       string,
       { centers: { x: number; y: number }[]; tileTopY: number }
@@ -784,31 +909,34 @@ export function FriendGraph<T extends string = string>({
       .map(([tag, b]) => {
         const raw =
           (tags?.[tag as T]?.color as string | undefined) ?? "#8b94a5";
-        // Strip trailing alpha from 8-digit hex so SVG attrs stay well-formed.
         const color = /^#[0-9a-f]{8}$/i.test(raw) ? raw.slice(0, 7) : raw;
         return { tag, color, points: b.centers, tileTopY: b.tileTopY };
       });
-  })();
+  }, [nodes, tags]);
 
   // Compute live edge endpoints from the current node positions.
-  const renderedEdges = baseLayout.edges.map((edge, i) => {
-    const a = nodesById.get(edge.a);
-    const b = nodesById.get(edge.b);
-    if (!a || !b) return null;
-    const aCenter = nodeCenter(a);
-    const bCenter = nodeCenter(b);
-    const from = nodeEdgeTowards(a, bCenter);
-    const to = nodeEdgeTowards(b, aCenter);
-    const involvesRoot = a.kind === "root" || b.kind === "root";
-    return {
-      key: i,
-      from,
-      to,
-      involvesRoot,
-      color: edge.color,
-      sharedTags: edge.sharedTags,
-    };
-  });
+  const renderedEdges = useMemo(
+    () =>
+      baseLayout.edges.map((edge, i) => {
+        const a = nodesById.get(edge.a);
+        const b = nodesById.get(edge.b);
+        if (!a || !b) return null;
+        const aCenter = nodeCenter(a);
+        const bCenter = nodeCenter(b);
+        const from = nodeEdgeTowards(a, bCenter);
+        const to = nodeEdgeTowards(b, aCenter);
+        const involvesRoot = a.kind === "root" || b.kind === "root";
+        return {
+          key: i,
+          from,
+          to,
+          involvesRoot,
+          color: edge.color,
+          sharedTags: edge.sharedTags,
+        };
+      }),
+    [baseLayout.edges, nodesById],
+  );
 
   return (
     <div
@@ -914,6 +1042,7 @@ export function FriendGraph<T extends string = string>({
               layout each frame on many mobile browsers and chews battery. */}
           {!reduceMotion &&
             !isNarrow &&
+            isVisible &&
             (() => {
               const rootN = nodes.find(
                 (n): n is RootGraphNode => n.kind === "root",
@@ -1004,12 +1133,12 @@ export function FriendGraph<T extends string = string>({
                   strokeDasharray={pattern}
                   initial={{ strokeDashoffset: 0 }}
                   animate={
-                    reduceMotion || isNarrow
+                    reduceMotion || isNarrow || !isVisible
                       ? { strokeDashoffset: 0 }
                       : { strokeDashoffset: -cycle }
                   }
                   transition={
-                    reduceMotion || isNarrow
+                    reduceMotion || isNarrow || !isVisible
                       ? { duration: 0 }
                       : { duration: 1.2, repeat: Infinity, ease: "linear" }
                   }
@@ -1050,6 +1179,7 @@ export function FriendGraph<T extends string = string>({
                   node={n}
                   accent={rootAccent}
                   engaged={engaged}
+                  isNarrow={isNarrow}
                   onNodePointerDown={onNodePointerDown}
                   onSuppressClick={consumeClickSuppression}
                 />
@@ -1059,6 +1189,7 @@ export function FriendGraph<T extends string = string>({
                   node={n}
                   hovered={hoveredId === n.friend.id}
                   engaged={engaged}
+                  isNarrow={isNarrow}
                   onHover={setHoveredId}
                   onNodePointerDown={onNodePointerDown}
                   onSuppressClick={consumeClickSuppression}
