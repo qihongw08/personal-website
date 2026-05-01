@@ -1,8 +1,9 @@
 export type Experience = {
   role: string;
   company: string;
+  logo: string;
   period: string;
-  status: "Active" | "Archived";
+  status: "Active" | "Incoming" | "Archived";
   description: string;
   bullets: string[];
   tags: string[];
@@ -10,8 +11,19 @@ export type Experience = {
 
 export const experience: Experience[] = [
   {
+    role: "Platform Engineer Intern",
+    company: "iCaptial",
+    logo: "/logos/icapital.png",
+    period: "Jun – Aug 2026",
+    status: "Incoming",
+    description: "",
+    bullets: [],
+    tags: [],
+  },
+  {
     role: "Quantitative Research Associate Co-op",
     company: "Morgan Stanley – Parametric",
+    logo: "/logos/morgan_stanley.png",
     period: "Jan 2026 – Present",
     status: "Active",
     description:
@@ -25,6 +37,7 @@ export const experience: Experience[] = [
   {
     role: "Software Engineer",
     company: "Generate Product Development Studio",
+    logo: "/logos/generate.png",
     period: "Sep – Dec 2025",
     status: "Archived",
     description:
@@ -38,6 +51,7 @@ export const experience: Experience[] = [
   {
     role: "Software Engineering Intern",
     company: "Onshape by PTC",
+    logo: "/logos/onshape.png",
     period: "Jun – Aug 2025",
     status: "Archived",
     description:
@@ -51,6 +65,7 @@ export const experience: Experience[] = [
   {
     role: "Software Engineering Co-op",
     company: "State Street × NU",
+    logo: "/logos/state_street.png",
     period: "Jan – Jun 2025",
     status: "Archived",
     description:
@@ -60,5 +75,19 @@ export const experience: Experience[] = [
       "Improved efficiency 60% via multi-threading mechanism.",
     ],
     tags: ["Databricks", "Python", "ETL"],
+  },
+  {
+    role: "Software Engineer Apprentice",
+    company: "JPMorgan Chase & Co.",
+    logo: "/logos/jpmorgan.png",
+    period: "November 2021 - July 2023",
+    status: "Archived",
+    description:
+      "Learned RESTful Java service development with Spring Boot through hands-on Test-Driven Development practice.",
+    bullets: [
+      "Acquired comprehensive knowledge of REST APIs covering resource modeling, endpoint design, and HTTP method patterns.",
+      "Wrote JUnit and Mockito unit tests, using mocks to validate service-layer logic against functional specs.",
+    ],
+    tags: ["Java", "JUnit", "Mockito", "Spring Boot"],
   },
 ];

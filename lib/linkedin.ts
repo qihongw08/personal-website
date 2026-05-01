@@ -1,6 +1,6 @@
 import { head } from "@vercel/blob";
 import { z } from "zod";
-import type { FriendNode } from "@/components/friend-graph";
+import type { FriendNode, RootNode } from "@/components/friend-graph";
 
 const BLOB_PATHNAME = "linkedin-profile/profiles.json";
 
@@ -40,7 +40,7 @@ const ApifyProfileSchema = z
 type ApifyProfile = z.infer<typeof ApifyProfileSchema>;
 
 function normalizeUrl(url: string): string {
-  return url.trim().replace(/\/+$/, "").toLowerCase();
+  return url.trim().replace(/\/+$/, "").toLowerCase().replace("://www.", "://");
 }
 
 function handleFromUrl(url: string): string {
@@ -145,7 +145,8 @@ async function fetchProfilesFromBlob(): Promise<BlobResult> {
 export async function buildFriendNodesFromLinkedin<T extends string>(
   profiles: Record<string, T[]>,
   photoOverrides: Record<string, string> = {},
-): Promise<FriendNode<T>[]> {
+  rootUrl?: string,
+): Promise<{ nodes: FriendNode<T>[]; root: RootNode | null }> {
   const { profiles: scraped, blobBase } = await fetchProfilesFromBlob();
   const byUrl = new Map<string, ApifyProfile>();
   for (const p of scraped) {
@@ -158,7 +159,7 @@ export async function buildFriendNodesFromLinkedin<T extends string>(
   );
 
   const entries = Object.entries(profiles) as Array<[string, T[]]>;
-  return entries.map(([url, tags]) => {
+  const nodes = entries.map(([url, tags]) => {
     const key = normalizeUrl(url);
     const match = byUrl.get(key);
     const overrideFilename = normalizedOverrides[key];
@@ -175,4 +176,19 @@ export async function buildFriendNodesFromLinkedin<T extends string>(
       tags,
     };
   });
+
+  let root: RootNode | null = null;
+  if (rootUrl) {
+    const match = byUrl.get(normalizeUrl(rootUrl));
+    if (match) {
+      root = {
+        name: pickName(match, rootUrl),
+        headline: match.headline ?? undefined,
+        photo: pickPhoto(match) ?? undefined,
+        link: rootUrl,
+      };
+    }
+  }
+
+  return { nodes, root };
 }

@@ -11,6 +11,7 @@
 import { ApifyClient } from "apify-client";
 import { put } from "@vercel/blob";
 import { friendLinkedins } from "../content/friends";
+import { profile } from "../content/profile";
 
 const apifyToken = process.env.APIFY_API_TOKEN;
 if (!apifyToken) {
@@ -29,7 +30,10 @@ const scraperMode =
   process.env.APIFY_SCRAPER_MODE || "Profile details no email ($4 per 1k)";
 const BLOB_PATHNAME = "linkedin-profile/profiles.json";
 
-const urls = Object.keys(friendLinkedins);
+const urls = [
+  profile.socials.linkedin.url,
+  ...Object.keys(friendLinkedins),
+];
 
 let items: unknown[] = [];
 if (urls.length === 0) {

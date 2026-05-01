@@ -12,7 +12,7 @@ type Props = {
 
 type FetchState =
   | { status: "loading" }
-  | { status: "loaded"; friends: FriendNode<FriendTag>[] }
+  | { status: "loaded"; friends: FriendNode<FriendTag>[]; root: RootNode | null }
   | { status: "error" };
 
 export function FriendsClient({ root, height = 680 }: Props) {
@@ -43,9 +43,9 @@ export function FriendsClient({ root, height = 680 }: Props) {
     fetch("/api/friends", { signal: controller.signal })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<{ friends: FriendNode<FriendTag>[] }>;
+        return r.json() as Promise<{ friends: FriendNode<FriendTag>[]; root: RootNode | null }>;
       })
-      .then((json) => setState({ status: "loaded", friends: json.friends }))
+      .then((json) => setState({ status: "loaded", friends: json.friends, root: json.root }))
       .catch((err: unknown) => {
         if (err instanceof Error && err.name === "AbortError") return;
         setState({ status: "error" });
@@ -58,7 +58,7 @@ export function FriendsClient({ root, height = 680 }: Props) {
     <div style={{ minHeight: renderHeight }}>
       {state.status === "loaded" ? (
         <FriendGraph<FriendTag>
-          root={root}
+          root={state.root ?? root}
           friends={state.friends}
           tags={tagRegistry}
           height={renderHeight}

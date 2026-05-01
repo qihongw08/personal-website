@@ -160,24 +160,48 @@ export function Career() {
                           background:
                             exp.status === "Active"
                               ? "rgba(10,133,98,0.1)"
-                              : "rgba(0,0,0,0.03)",
+                              : exp.status === "Incoming"
+                                ? "rgba(8,145,178,0.08)"
+                                : "rgba(0,0,0,0.03)",
                           border: `1px solid ${
                             exp.status === "Active"
                               ? "rgba(10,133,98,0.3)"
-                              : "var(--glass-border)"
+                              : exp.status === "Incoming"
+                                ? "rgba(8,145,178,0.3)"
+                                : "var(--glass-border)"
                           }`,
                           color:
                             exp.status === "Active"
                               ? "#0a8562"
-                              : "var(--ink-faint)",
+                              : exp.status === "Incoming"
+                                ? "var(--brand)"
+                                : "var(--ink-faint)",
                         }}
                       >
                         {exp.status}
                       </span>
                     </div>
-                    <h3 className="m-0 mb-1 font-display text-lg font-bold text-[var(--ink)]">
-                      {exp.company}
-                    </h3>
+                    <div className="mb-1 flex items-center gap-3">
+                      {exp.logo && (
+                        <div
+                          className="flex h-10 shrink-0 items-center overflow-hidden rounded-lg px-2"
+                          style={{
+                            background: "rgba(255,255,255,0.7)",
+                            border: "1px solid var(--glass-border)",
+                          }}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={exp.logo}
+                            alt=""
+                            className="h-8 w-auto max-w-[120px] object-contain"
+                          />
+                        </div>
+                      )}
+                      <h3 className="m-0 font-display text-lg font-bold text-[var(--ink)]">
+                        {exp.company}
+                      </h3>
+                    </div>
                     <p className="my-3.5 text-[13px] leading-[1.7] text-[var(--ink-muted)]">
                       {exp.description}
                     </p>
@@ -231,12 +255,17 @@ export function Career() {
                     background:
                       exp.status === "Active"
                         ? "#1cb389"
-                        : "var(--ink-faint)",
+                        : exp.status === "Incoming"
+                          ? "transparent"
+                          : "var(--ink-faint)",
                     boxShadow:
                       exp.status === "Active"
                         ? "0 0 12px rgba(28,179,137,0.45)"
                         : "none",
-                    border: "2px solid var(--surface)",
+                    border:
+                      exp.status === "Incoming"
+                        ? "2px dashed var(--brand)"
+                        : "2px solid var(--surface)",
                   }}
                   initial={{ opacity: 0 }}
                   whileInView={{ opacity: 1 }}

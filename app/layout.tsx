@@ -34,7 +34,7 @@ const caveat = Caveat({
 
 export const metadata: Metadata = {
   title: `${profile.name.en}`,
-  description: profile.tagline,
+  description: profile.bio.intro,
   icons: {
     icon: "/logos/logo.png",
     shortcut: "/logos/logo.png",
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: `${profile.name.en}`,
-    description: profile.tagline,
+    description: profile.bio.intro,
     type: "website",
     images: [{ url: "/logos/logo.png" }],
   },

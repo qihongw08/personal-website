@@ -5,8 +5,6 @@ export const profile = {
     en: "Qihong Wu",
     cn: "吴其鸿",
   },
-  tagline:
-    "Computer Science @ Northeastern. Full-stack engineer shipping search infra, reporting pipelines, and hackathon wins.",
   initials: "QW",
   email: "wu.qiho@northeastern.edu",
   location: "Brooklyn, NY",
