@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { friendLinkedins } from "@/content/friends";
+import { friendLinkedins, friendPhotoOverrides } from "@/content/friends";
 import { buildFriendNodesFromLinkedin } from "@/lib/linkedin";
 
 // Data lives in Vercel Blob (refreshed weekly by scrape-linkedin.yml). The
@@ -7,6 +7,6 @@ import { buildFriendNodesFromLinkedin } from "@/lib/linkedin";
 export const revalidate = 3600;
 
 export async function GET() {
-  const friends = await buildFriendNodesFromLinkedin(friendLinkedins);
+  const friends = await buildFriendNodesFromLinkedin(friendLinkedins, friendPhotoOverrides);
   return NextResponse.json({ friends });
 }

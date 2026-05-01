@@ -109,25 +109,30 @@ function pickPhoto(p: ApifyProfile): string | undefined {
   );
 }
 
-async function fetchProfilesFromBlob(): Promise<ApifyProfile[]> {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) return [];
+type BlobResult = { profiles: ApifyProfile[]; blobBase: string | null };
+
+async function fetchProfilesFromBlob(): Promise<BlobResult> {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return { profiles: [], blobBase: null };
   try {
     const blob = await head(BLOB_PATHNAME);
+    // Derive the folder prefix so callers can build sibling URLs by filename.
+    const blobBase = blob.url.slice(0, blob.url.lastIndexOf("/") + 1);
     const res = await fetch(blob.url, { cache: "no-store" });
-    if (!res.ok) return [];
+    if (!res.ok) return { profiles: [], blobBase: null };
     const raw: unknown = await res.json();
-    if (!Array.isArray(raw)) return [];
-    return raw
+    if (!Array.isArray(raw)) return { profiles: [], blobBase: null };
+    const profiles = raw
       .map((item) => {
         const parsed = ApifyProfileSchema.safeParse(item);
         return parsed.success ? parsed.data : null;
       })
       .filter((p): p is ApifyProfile => p !== null);
+    return { profiles, blobBase };
   } catch (err) {
     if (process.env.NODE_ENV === "development") {
       console.error("[linkedin] failed to load profiles from blob:", err);
     }
-    return [];
+    return { profiles: [], blobBase: null };
   }
 }
 
@@ -139,23 +144,33 @@ async function fetchProfilesFromBlob(): Promise<ApifyProfile[]> {
  */
 export async function buildFriendNodesFromLinkedin<T extends string>(
   profiles: Record<string, T[]>,
+  photoOverrides: Record<string, string> = {},
 ): Promise<FriendNode<T>[]> {
-  const scraped = await fetchProfilesFromBlob();
+  const { profiles: scraped, blobBase } = await fetchProfilesFromBlob();
   const byUrl = new Map<string, ApifyProfile>();
   for (const p of scraped) {
     const u = pickUrl(p);
     if (u) byUrl.set(normalizeUrl(u), p);
   }
 
+  const normalizedOverrides = Object.fromEntries(
+    Object.entries(photoOverrides).map(([k, v]) => [normalizeUrl(k), v]),
+  );
+
   const entries = Object.entries(profiles) as Array<[string, T[]]>;
   return entries.map(([url, tags]) => {
-    const match = byUrl.get(normalizeUrl(url));
-    if (!match) return fallbackNode(url, tags);
+    const key = normalizeUrl(url);
+    const match = byUrl.get(key);
+    const overrideFilename = normalizedOverrides[key];
+    const overridePhoto =
+      overrideFilename && blobBase ? `${blobBase}${overrideFilename}` : undefined;
+
+    if (!match) return { ...fallbackNode(url, tags), photo: overridePhoto };
     return {
       id: idFromUrl(url),
       name: pickName(match, url),
       headline: match.headline ?? undefined,
-      photo: pickPhoto(match),
+      photo: pickPhoto(match) ?? overridePhoto,
       link: url,
       tags,
     };

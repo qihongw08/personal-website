@@ -24,6 +24,16 @@ export const tagRegistry: Record<FriendTag, TagDefinition> = {
 };
 
 /**
+ * Manual photo fallbacks — LinkedIn URL → filename inside the
+ * linkedin-profile/ folder in Vercel Blob.
+ * Used only when the scraped JSON has no photo for that profile.
+ * Example: "https://www.linkedin.com/in/example": "example.jpg"
+ */
+export const friendPhotoOverrides: Record<string, string> = {
+  "https://www.linkedin.com/in/quntao-zheng": "quntao.jpeg",
+};
+
+/**
  * Friends list — LinkedIn URL → tags. The Apify scraper fetches live
  * profile data (name, headline, photo) at build/ISR time. URLs without
  * a successful fetch fall back to a synthesized name from the URL handle.
@@ -37,6 +47,7 @@ export const friendLinkedins: Record<string, FriendTag[]> = {
   "https://www.linkedin.com/in/vivianzou1": ["COLLEGE BUDDY"],
   "https://www.linkedin.com/in/sanjana-singhania": ["COLLEGE BUDDY"],
   "https://www.linkedin.com/in/austin-hwang18/": ["COLLEGE BUDDY"],
+  "https://www.linkedin.com/in/gillianpalmer1/": ["COLLEGE FRIEND / COWORKER"],
   "https://www.linkedin.com/in/lok-ye-young-62ba3b25a": [
     "COLLEGE FRIEND / COWORKER",
   ],

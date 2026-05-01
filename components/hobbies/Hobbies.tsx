@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Code2, Feather } from "lucide-react";
 import { hobbies } from "@/content/hobbies";
 import { scanMedia } from "@/lib/media";
@@ -40,7 +41,9 @@ export async function Hobbies() {
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
           {/* League of Legends — 2x2 on md+, live Riot API */}
-          <LeagueCard />
+          <Suspense fallback={<div className="glass-card animate-pulse rounded-xl md:col-span-2 md:row-span-2" />}>
+            <LeagueCard />
+          </Suspense>
 
           {/* Badminton — 2x2 on md+ */}
           <div className={`${cardBase} !p-0 md:col-span-2 md:row-span-2`}>
@@ -141,7 +144,9 @@ export async function Hobbies() {
           </div>
 
           {/* KuGou top played */}
-          <TopPlayed />
+          <Suspense fallback={<div className="glass-card col-span-full h-48 animate-pulse rounded-xl" />}>
+            <TopPlayed />
+          </Suspense>
         </div>
       </FadeInWhenVisible>
     </section>
