@@ -170,25 +170,32 @@ export async function refreshKugouAuth(): Promise<{
   return { ok: true, status: 200, updatedAt: merged.updatedAt };
 }
 
-type RawSong = {
+type RawListenTrack = {
+  hash?: string;
+  name?: string;
+  filename?: string;
+  singername?: string | null;
+  image?: string;
+  image_320?: string;
+  image_high?: string;
+  image_sq?: string;
+  cover?: string;
+  albumname?: string;
+  album_name?: string;
+  albuminfo?: { name?: string };
+  listen_count?: number;
   pc?: number;
-  info?: {
-    name?: string;
-    singername?: string;
-    hash?: string;
-    cover?: string;
-    albuminfo?: { name?: string };
-    trans_param?: { union_cover?: string };
-  };
+  play_count?: number;
+  count?: number;
+  trans_param?: { union_cover?: string };
 };
 
-type UserHistoryResponse = {
+type UserListenResponse = {
   status?: number;
-  data?: { songs?: RawSong[] };
+  data?: { lists?: RawListenTrack[] };
 };
 
-function pickImage(s: RawSong): string | null {
-  const raw = s.info?.cover ?? s.info?.trans_param?.union_cover;
+function normalizeKugouImage(raw: string | null | undefined): string | null {
   if (!raw) return null;
   // KuGou cover URLs contain a literal "{size}" placeholder for the edge length.
   return raw.replace(/\{size\}/g, "240").replace(/^http:/, "https:");
@@ -217,8 +224,26 @@ function parseTitleFromName(name: string): { artist: string; title: string } {
 }
 
 function pickPlaylistImage(s: RawPlaylistTrack): string | null {
-  if (!s.cover) return null;
-  return s.cover.replace(/\{size\}/g, "240").replace(/^http:/, "https:");
+  return normalizeKugouImage(s.cover);
+}
+
+function pickListenImage(s: RawListenTrack): string | null {
+  return normalizeKugouImage(
+    s.image_320 ??
+      s.image ??
+      s.image_high ??
+      s.image_sq ??
+      s.cover ??
+      s.trans_param?.union_cover,
+  );
+}
+
+function pickListenCount(s: RawListenTrack): number | null {
+  return s.listen_count ?? s.play_count ?? s.pc ?? s.count ?? null;
+}
+
+function isCnPanelSong(song: TopSong): boolean {
+  return /[\u3400-\u9fff]/.test(song.title);
 }
 
 /**
@@ -269,30 +294,37 @@ export async function getPlaylistTracks(
 }
 
 /**
- * Fetches top-played songs from KuGou via /user/history. The endpoint returns
- * recent listens unsorted; we sort by `pc` (play count) desc to surface the
- * actual top-played. Fail-open: returns [] on missing env/auth or API error.
+ * Fetches all-time top-played songs from KuGou via /user/listen. `type=1`
+ * selects the historical ranking; `type=0` is the recent weekly ranking.
  */
 export async function getTopPlayed(limit = 6): Promise<TopSong[]> {
   const auth = await readStoredAuth();
   if (!auth) return [];
   try {
-    const out = await callApi("/user/history", auth, {}, { next: { revalidate: 604800 } });
+    const out = await callApi(
+      "/user/listen",
+      auth,
+      { type: "1" },
+      { next: { revalidate: 604800 } },
+    );
     if (!out || !out.res.ok) return [];
-    const json = (await out.res.json()) as UserHistoryResponse;
+    const json = (await out.res.json()) as UserListenResponse;
     if (json.status !== 1) return [];
-    const songs = json.data?.songs ?? [];
-    return [...songs]
-      .sort((a, b) => (b.pc ?? 0) - (a.pc ?? 0))
-      .slice(0, limit)
-      .map((s): TopSong => ({
-        hash: s.info?.hash ?? "",
-        title: s.info?.name ?? "",
-        artist: s.info?.singername ?? "",
-        album: s.info?.albuminfo?.name ?? "",
-        imageUrl: pickImage(s),
-        playCount: s.pc ?? null,
-      }));
+    const songs = json.data?.lists ?? [];
+    return songs
+      .map((s): TopSong => {
+        const fromName = parseTitleFromName(s.name ?? s.filename ?? "");
+        return {
+          hash: s.hash ?? "",
+          title: fromName.title,
+          artist: s.singername || fromName.artist,
+          album: s.albumname ?? s.album_name ?? s.albuminfo?.name ?? "",
+          imageUrl: pickListenImage(s),
+          playCount: pickListenCount(s),
+        };
+      })
+      .filter(isCnPanelSong)
+      .slice(0, limit);
   } catch (err) {
     if (process.env.NODE_ENV === "development") {
       console.error("[kugou] getTopPlayed failed:", err);

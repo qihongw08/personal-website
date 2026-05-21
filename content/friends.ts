@@ -6,7 +6,7 @@ export const FRIEND_TAGS = [
   "COLLEGE FRIEND / COWORKER",
   "GENERATE BUDDY",
   "HACKMIT 2025",
-  "SENIOR YEAR ROOMATE",
+  "ROOMATE",
 ] as const;
 
 export type FriendTag = (typeof FRIEND_TAGS)[number];
@@ -20,7 +20,7 @@ export const tagRegistry: Record<FriendTag, TagDefinition> = {
     color: "#d38417",
   },
   "HACKMIT 2025": { label: "HackMIT '25", color: "#9333ea" },
-  "SENIOR YEAR ROOMATE": { label: "Senior Year Roommate", color: "#21ad2a" },
+  ROOMATE: { label: "Roommate", color: "#21ad2a" },
 };
 
 /**
@@ -53,11 +53,11 @@ export const friendLinkedins: Record<string, FriendTag[]> = {
   ],
   "https://www.linkedin.com/in/dao-ho": [
     "GENERATE BUDDY",
-    "SENIOR YEAR ROOMATE",
+    "ROOMATE",
   ],
   "https://www.linkedin.com/in/tomasdavola": [
     "HACKMIT 2025",
-    "SENIOR YEAR ROOMATE",
+    "ROOMATE",
   ],
   "https://www.linkedin.com/in/troy-gwdn": ["HACKMIT 2025"],
   "https://www.linkedin.com/in/aahil-nishad": [
