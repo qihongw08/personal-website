@@ -15,7 +15,7 @@ export const experience: Experience[] = [
     company: "iCapital",
     logo: "/logos/icapital.png",
     period: "Jun – Aug 2026",
-    status: "Incoming",
+    status: "Active",
     description: "",
     bullets: [],
     tags: [],
@@ -24,10 +24,10 @@ export const experience: Experience[] = [
     role: "Quantitative Research Associate Co-op",
     company: "Morgan Stanley – Parametric",
     logo: "/logos/morgan_stanley.png",
-    period: "Jan 2026 – Present",
-    status: "Active",
+    period: "Jan – Jun 2026",
+    status: "Archived",
     description:
-      "Automating fixed-income client reporting and LLM credit analysis for Parametric's portfolio managers.",
+      "Automated fixed-income client reporting and LLM credit analysis for Parametric's portfolio managers.",
     bullets: [
       "Automated the client Advisor Report, cutting a 2h+ per-client workflow to minutes and unlocking live use in client meetings.",
       "Built a credit analysis agent workflow on bond holdings, iteratively self-refining prompts across ~20 bond sectors from scored feedback.",
