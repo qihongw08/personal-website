@@ -26,6 +26,8 @@ if (!blobToken) {
 }
 
 const actorId = process.env.APIFY_LINKEDIN_ACTOR_ID || "LpVuK3Zozwuipa5bp";
+const scraperMode =
+  process.env.APIFY_SCRAPER_MODE || "Profile details no email ($4 per 1k)";
 const BLOB_PATHNAME = "linkedin-profile/profiles.json";
 
 // Free Apify accounts cap this actor at 10 profiles per run, so we chunk the
@@ -72,7 +74,7 @@ if (urls.length === 0) {
   for (const [i, batch] of batches.entries()) {
     const run = await client
       .actor(actorId)
-      .call({ profileUrls: batch }, { waitSecs: 300 });
+      .call({ profileScraperMode: scraperMode, queries: batch }, { waitSecs: 300 });
 
     if (!run?.defaultDatasetId) {
       console.error(`Batch ${i + 1} returned no dataset.`);
