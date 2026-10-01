@@ -16,9 +16,13 @@ export const experience: Experience[] = [
     logo: "/logos/icapital.png",
     period: "Jun – Aug 2026",
     status: "Active",
-    description: "",
-    bullets: [],
-    tags: [],
+    description:
+      "Built event-driven data infrastructure for iCapital's structured investments platform.",
+    bullets: [
+      "Extended a CQRS architecture for the structured investments platform, projecting Kafka events into a PostgreSQL materialized view and cutting page render time by 50%.",
+      "Built event-driven Scala integrations that enrich Kafka events with trade data, using an in-memory cache with REST API fallback and unblocking the new platform's rollout.",
+    ],
+    tags: ["Scala", "Kafka", "PostgreSQL", "CQRS"],
   },
   {
     role: "Quantitative Research Associate Co-op",
