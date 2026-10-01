@@ -15,7 +15,7 @@ export const experience: Experience[] = [
     company: "iCapital",
     logo: "/logos/icapital.png",
     period: "Jun – Aug 2026",
-    status: "Active",
+    status: "Archived",
     description:
       "Built event-driven data infrastructure for iCapital's structured investments platform.",
     bullets: [
